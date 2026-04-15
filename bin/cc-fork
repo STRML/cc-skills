@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -77,14 +78,18 @@ def run_fork(
     uuid_: str,
     task: str,
     model: str | None,
+    metrics: bool,
     index: int,
     outputs: list[str | None],
     errors: list[str | None],
+    usages: list[dict | None],
 ) -> None:
     """Run one `claude --resume` invocation. Stores output in outputs[index]."""
     cmd = ["claude", "--resume", uuid_, "-p"]
     if model:
         cmd += ["--model", model]
+    if metrics:
+        cmd += ["--output-format", "json"]
     cmd.append(task)
     env = {**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""}
     try:
@@ -95,7 +100,20 @@ def run_fork(
             text=True,
             timeout=600,
         )
-        outputs[index] = result.stdout
+        if metrics and result.returncode == 0:
+            try:
+                parsed = json.loads(result.stdout)
+                outputs[index] = parsed.get("result", "")
+                usages[index] = {
+                    "usage": parsed.get("usage", {}),
+                    "cost_usd": parsed.get("total_cost_usd") or parsed.get("cost_usd"),
+                    "duration_ms": parsed.get("duration_ms"),
+                }
+            except json.JSONDecodeError:
+                outputs[index] = result.stdout
+                errors[index] = "metrics: could not parse JSON output"
+        else:
+            outputs[index] = result.stdout
         if result.returncode != 0:
             errors[index] = f"exit {result.returncode}: {result.stderr.strip()}"
     except subprocess.TimeoutExpired:
@@ -128,6 +146,10 @@ def main() -> int:
     ap.add_argument(
         "--keep", action="store_true",
         help="Don't delete forked JSONLs on exit. Useful for debugging.",
+    )
+    ap.add_argument(
+        "--metrics", action="store_true",
+        help="Run forks with --output-format json and print a per-fork + aggregate token/cost report.",
     )
     ap.add_argument(
         "--quiet", action="store_true",
@@ -172,13 +194,14 @@ def main() -> int:
 
     outputs: list[str | None] = [None] * len(args.tasks)
     errors: list[str | None] = [None] * len(args.tasks)
+    usages: list[dict | None] = [None] * len(args.tasks)
     threads: list[threading.Thread] = []
 
     try:
         for i, (u, task) in enumerate(zip(fork_uuids, args.tasks)):
             t = threading.Thread(
                 target=run_fork,
-                args=(u, task, args.model, i, outputs, errors),
+                args=(u, task, args.model, args.metrics, i, outputs, errors, usages),
                 daemon=True,
             )
             t.start()
@@ -209,7 +232,63 @@ def main() -> int:
                 print(f"[ERROR] {err}", file=sys.stderr)
             print((output or "").rstrip())
 
+    if args.metrics:
+        print_metrics(args.tasks, usages, errors)
+
     return 1 if any(errors) else 0
+
+
+def print_metrics(
+    tasks: list[str],
+    usages: list[dict | None],
+    errors: list[str | None],
+) -> None:
+    """Render a per-fork and aggregate usage table to stderr."""
+    def g(d: dict, *path) -> int:
+        cur = d
+        for k in path:
+            if not isinstance(cur, dict):
+                return 0
+            cur = cur.get(k, 0)
+        return cur or 0
+
+    print("\n=== cc-fork metrics ===", file=sys.stderr)
+    print(
+        f"{'fork':<5} {'input':>8} {'output':>8} {'cache_w':>9} {'cache_r':>10} {'cost':>9} {'dur_ms':>8}",
+        file=sys.stderr,
+    )
+    totals = {"in": 0, "out": 0, "cw": 0, "cr": 0, "cost": 0.0, "dur": 0}
+    for i, (task, u, err) in enumerate(zip(tasks, usages, errors)):
+        if not u:
+            note = err or "no metrics"
+            print(f"{i + 1:<5} {'— ' + note:<60}", file=sys.stderr)
+            continue
+        usage = u.get("usage", {})
+        in_t = g(usage, "input_tokens")
+        out_t = g(usage, "output_tokens")
+        cw = g(usage, "cache_creation_input_tokens")
+        cr = g(usage, "cache_read_input_tokens")
+        cost = u.get("cost_usd") or 0
+        dur = u.get("duration_ms") or 0
+        totals["in"] += in_t; totals["out"] += out_t
+        totals["cw"] += cw; totals["cr"] += cr
+        totals["cost"] += cost; totals["dur"] += dur
+        print(
+            f"{i + 1:<5} {in_t:>8,} {out_t:>8,} {cw:>9,} {cr:>10,} {'$' + format(cost, '.4f'):>9} {dur:>8,}",
+            file=sys.stderr,
+        )
+    print(
+        f"{'TOT':<5} {totals['in']:>8,} {totals['out']:>8,} {totals['cw']:>9,} {totals['cr']:>10,} "
+        f"{'$' + format(totals['cost'], '.4f'):>9} {totals['dur']:>8,}",
+        file=sys.stderr,
+    )
+    saved = totals["cr"]
+    if saved:
+        print(
+            f"\ncache_read saved ~{saved:,} tokens vs re-sending "
+            f"(~{saved * 0.9 / 1000:.1f}K tokens @ 0.1× input rate).",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":
