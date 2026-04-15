@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""cc-fork — spawn parallel Claude Code subagents that inherit current session context.
+
+Each fork is created by snapshotting the parent session's JSONL, copying it to a
+new v4 UUID file in the same project dir, and launching `claude --resume <uuid> -p`
+against it. Forks inherit the full parent conversation. Cleanup deletes the forked
+JSONLs (and any sidecar metadata files) on exit by default.
+
+Usage:
+    cc-fork "task1" "task2" "task3"
+    cc-fork --parent <uuid> --model opus "task1" "task2"
+    cc-fork --keep --output-dir /tmp/out "task1" "task2"
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import uuid
+from pathlib import Path
+
+V4_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.jsonl$",
+    re.IGNORECASE,
+)
+
+
+def encode_project_path(cwd: Path) -> str:
+    """Claude Code encodes project paths by replacing / and . with -."""
+    return re.sub(r"[/.]", "-", str(cwd.resolve()))
+
+
+def find_project_dir(cwd: Path) -> Path:
+    """Locate ~/.claude/projects/<encoded-cwd>/"""
+    encoded = encode_project_path(cwd)
+    project_dir = Path.home() / ".claude" / "projects" / encoded
+    if not project_dir.is_dir():
+        sys.exit(
+            f"cc-fork: no Claude session directory for {cwd} "
+            f"(expected {project_dir}). Start a session in this dir first."
+        )
+    return project_dir
+
+
+def find_parent_jsonl(project_dir: Path, explicit: str | None) -> Path:
+    """Return the parent session JSONL. Explicit UUID wins; else pick largest by size."""
+    if explicit:
+        p = project_dir / f"{explicit}.jsonl"
+        if not p.is_file():
+            sys.exit(f"cc-fork: --parent {explicit} not found at {p}")
+        return p
+
+    candidates = [
+        f for f in project_dir.glob("*.jsonl")
+        if V4_UUID_RE.match(f.name) and f.stat().st_size > 500
+    ]
+    if not candidates:
+        sys.exit(
+            f"cc-fork: no substantive session JSONL found in {project_dir}. "
+            f"Pass --parent <uuid> or start a session first."
+        )
+    # Largest file is almost always the real conversation (sidecars are tiny).
+    return max(candidates, key=lambda f: f.stat().st_size)
+
+
+def new_uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def run_fork(
+    uuid_: str,
+    task: str,
+    model: str | None,
+    index: int,
+    outputs: list[str | None],
+    errors: list[str | None],
+) -> None:
+    """Run one `claude --resume` invocation. Stores output in outputs[index]."""
+    cmd = ["claude", "--resume", uuid_, "-p"]
+    if model:
+        cmd += ["--model", model]
+    cmd.append(task)
+    env = {**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""}
+    try:
+        result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        outputs[index] = result.stdout
+        if result.returncode != 0:
+            errors[index] = f"exit {result.returncode}: {result.stderr.strip()}"
+    except subprocess.TimeoutExpired:
+        errors[index] = "timed out after 600s"
+    except Exception as e:
+        errors[index] = f"{type(e).__name__}: {e}"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Spawn parallel Claude subagents that inherit the current session's context."
+    )
+    ap.add_argument("tasks", nargs="+", help="One task per fork (positional args).")
+    ap.add_argument(
+        "--parent", metavar="UUID",
+        help="Parent session UUID. Default: largest JSONL in this project's session dir.",
+    )
+    ap.add_argument(
+        "--model", default=None,
+        help="Model for forks (haiku/sonnet/opus). Default: Claude Code default.",
+    )
+    ap.add_argument(
+        "--stagger", type=float, default=1.0,
+        help="Seconds between fork launches. Default: 1.0 (required to avoid session-index race).",
+    )
+    ap.add_argument(
+        "--output-dir", metavar="DIR",
+        help="Write each fork's output to <DIR>/fork-NN.out instead of stdout.",
+    )
+    ap.add_argument(
+        "--keep", action="store_true",
+        help="Don't delete forked JSONLs on exit. Useful for debugging.",
+    )
+    ap.add_argument(
+        "--quiet", action="store_true",
+        help="Suppress progress messages to stderr.",
+    )
+    args = ap.parse_args()
+
+    def log(msg: str) -> None:
+        if not args.quiet:
+            print(f"cc-fork: {msg}", file=sys.stderr)
+
+    cwd = Path.cwd()
+    project_dir = find_project_dir(cwd)
+    parent = find_parent_jsonl(project_dir, args.parent)
+    log(f"parent session: {parent.name} ({parent.stat().st_size // 1024}K)")
+
+    before = {f.name for f in project_dir.glob("*.jsonl")}
+
+    fork_uuids = [new_uuid() for _ in args.tasks]
+    for u in fork_uuids:
+        shutil.copy2(parent, project_dir / f"{u}.jsonl")
+    log(f"created {len(fork_uuids)} fork(s)")
+
+    # Cleanup: delete every JSONL that wasn't present before (forks + sidecars).
+    def cleanup() -> None:
+        if args.keep:
+            log(f"--keep: leaving forks in {project_dir}")
+            return
+        now = {f.name for f in project_dir.glob("*.jsonl")}
+        for name in now - before:
+            try:
+                (project_dir / name).unlink()
+            except OSError:
+                pass
+
+    def sig_handler(signum: int, _frame) -> None:
+        cleanup()
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGINT, sig_handler)
+    signal.signal(signal.SIGTERM, sig_handler)
+
+    outputs: list[str | None] = [None] * len(args.tasks)
+    errors: list[str | None] = [None] * len(args.tasks)
+    threads: list[threading.Thread] = []
+
+    try:
+        for i, (u, task) in enumerate(zip(fork_uuids, args.tasks)):
+            t = threading.Thread(
+                target=run_fork,
+                args=(u, task, args.model, i, outputs, errors),
+                daemon=True,
+            )
+            t.start()
+            threads.append(t)
+            log(f"launched fork {i + 1}/{len(args.tasks)} ({u[:8]})")
+            if i < len(args.tasks) - 1:
+                time.sleep(args.stagger)
+
+        for t in threads:
+            t.join()
+    finally:
+        cleanup()
+
+    if args.output_dir:
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for i, (task, output, err) in enumerate(zip(args.tasks, outputs, errors)):
+            path = out_dir / f"fork-{i + 1:02d}.out"
+            content = output or ""
+            if err:
+                content = f"[ERROR] {err}\n{content}"
+            path.write_text(content)
+        log(f"wrote {len(args.tasks)} output file(s) to {out_dir}")
+    else:
+        for i, (task, output, err) in enumerate(zip(args.tasks, outputs, errors)):
+            print(f"\n=== fork {i + 1}: {task[:60]}{'…' if len(task) > 60 else ''} ===")
+            if err:
+                print(f"[ERROR] {err}", file=sys.stderr)
+            print((output or "").rstrip())
+
+    return 1 if any(errors) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

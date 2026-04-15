@@ -1,6 +1,6 @@
 # cc-skills
 
-A small, opinionated collection of [Claude Code](https://claude.com/claude-code) slash commands and skills I actually use.
+A small, opinionated collection of [Claude Code](https://claude.com/claude-code) slash commands, skills, and CLI tools I actually use.
 
 Everything here is MIT-licensed. Grab what's useful; ignore the rest.
 
@@ -13,6 +13,9 @@ git clone git@github.com:STRML/cc-skills.git
 Then symlink (or copy) what you want into your Claude Code config:
 
 ```bash
+# CLI tools → somewhere on PATH
+ln -s "$(pwd)/cc-skills/bin/cc-fork" ~/.local/bin/cc-fork
+
 # Slash commands → ~/.claude/commands/
 ln -s "$(pwd)/cc-skills/commands/code-cleanup.md" ~/.claude/commands/code-cleanup.md
 
@@ -25,17 +28,43 @@ Slash commands become available immediately. Skills require a session restart to
 ## Layout
 
 ```
+bin/        Standalone CLI tools
 commands/   Slash commands — invoke with /<name>
 skills/     Skills — invoke via the Skill tool
 ```
+
+## CLI tools
+
+### `cc-fork`
+
+Spawn N parallel Claude Code subagents that inherit the current session's context — the thing built-in subagents don't do.
+
+Built-in `Agent`/`Task` spawns start with a blank conversation: they can't see your exploration, your clarifications with the user, or anything else that's happened. They re-read the codebase from scratch every time. `cc-fork` sidesteps this by snapshotting the current session's JSONL, copying it to N new UUIDs, and launching `claude --resume` on each. Every fork starts as a branch of the live conversation.
+
+```bash
+cc-fork "task 1" "task 2" "task 3"                       # stdout output
+cc-fork --model haiku "quick task A" "quick task B"      # specify model
+cc-fork --output-dir .tmp/reports "task1" "task2"        # write to files
+cc-fork --parent <uuid> "task"                           # specific parent session
+cc-fork --keep "task"                                    # don't cleanup forked JSONLs
+```
+
+Defaults:
+- Parent session = largest JSONL in the current working dir's project dir
+- Stagger = 1s between launches (required — simultaneous launches race on Claude Code's session-index)
+- Cleanup = ON (deletes forked JSONLs + metadata sidecars on exit)
+
+Requires Python 3 and the `claude` CLI on PATH. Zero pip deps.
+
+**When to use it:** fan-out tasks where re-explaining context is wasteful — codebase audits, multi-angle reviews, parallel refactors. Each fork pays full parent-context tokens, but prompt-cached across spawns after the first.
+
+**When not to use it:** single-shot tasks (just run them), or tasks that need fresh context on purpose (use `Agent` instead).
 
 ## Commands
 
 ### `/code-cleanup`
 
-Deep codebase cleanup via eight parallel subagents. A single recon pass up front builds a shared context brief (languages, build commands, available tooling, landmines). The brief is inlined verbatim as the prefix of each subagent's prompt — identical across all eight — so spawns 2–8 hit Anthropic's prompt cache for the shared portion.
-
-Each agent owns one concern:
+Deep codebase cleanup via eight parallel subagents that inherit this session's context (requires `cc-fork` on PATH). Recon happens in the current conversation; the eight forks see it as live history, so there's no need to inline a brief. Each fork owns one concern:
 
 1. Deduplicate repeated logic (DRY where it cuts complexity)
 2. Consolidate shared type definitions
@@ -46,7 +75,7 @@ Each agent owns one concern:
 7. Delete deprecated code, compat shims, and orphaned feature flags
 8. Remove AI slop — narration comments, stubs, commented-out code
 
-The command offers an **edit mode** (make high-confidence fixes in place) and a **dry-run mode** (evidence-backed reports only, reconcile with human triage). Dry-run is the safer default for fragile or first-time codebases.
+The command offers an **edit mode** (make high-confidence fixes in place) and a **dry-run mode** (evidence-backed reports only, reconcile with human triage). Dry-run is the safer default for fragile or first-time codebases. Falls back to the Agent-tool + cached-prefix recipe if `cc-fork` isn't installed.
 
 ### `/check-pr-reviews`
 
