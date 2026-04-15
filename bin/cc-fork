@@ -166,24 +166,30 @@ def main() -> int:
     parent = find_parent_jsonl(project_dir, args.parent)
     log(f"parent session: {parent.name} ({parent.stat().st_size // 1024}K)")
 
-    before = {f.name for f in project_dir.glob("*.jsonl")}
-
+    start_time = time.time()
     fork_uuids = [new_uuid() for _ in args.tasks]
     for u in fork_uuids:
         shutil.copy2(parent, project_dir / f"{u}.jsonl")
     log(f"created {len(fork_uuids)} fork(s)")
 
-    # Cleanup: delete every JSONL that wasn't present before (forks + sidecars).
+    # Cleanup: delete every JSONL newer than start_time (forks + sidecars),
+    # except the parent. mtime-based beats name-diff because sidecars can be
+    # written asynchronously and race a set-based post-run scan.
     def cleanup() -> None:
         if args.keep:
             log(f"--keep: leaving forks in {project_dir}")
             return
-        now = {f.name for f in project_dir.glob("*.jsonl")}
-        for name in now - before:
-            try:
-                (project_dir / name).unlink()
-            except OSError:
-                pass
+        # Two-pass with a short delay to catch late-arriving sidecars.
+        for _ in range(2):
+            for f in project_dir.glob("*.jsonl"):
+                if f.name == parent.name:
+                    continue
+                try:
+                    if f.stat().st_mtime >= start_time:
+                        f.unlink()
+                except OSError:
+                    pass
+            time.sleep(0.3)
 
     def sig_handler(signum: int, _frame) -> None:
         cleanup()
