@@ -60,10 +60,10 @@ The shared prefix MUST be byte-identical across all 8 spawns. Any divergence (ev
 **Launch sequence:**
 
 1. Launch spawn #1 (any mandate). Set `subagent_type: general-purpose`, `model: opus`, `run_in_background: true`.
-2. Wait ~10–15 seconds. This lets the cache commit server-side so subsequent spawns hit it instead of racing to write it.
+2. Wait until spawn #1 is visibly streaming output in the background-agent UI. That confirms prompt ingestion has completed and the cache entry is written. Five seconds is usually enough; if the UI hasn't shown activity yet, keep waiting.
 3. Launch spawns #2–#8 in a single message with seven parallel `Agent` tool calls, all same `subagent_type`/`model`/`run_in_background`.
 
-Why staggered: firing all 8 simultaneously creates a race — the first request primes the cache, but requests 2–8 may arrive before the cache commit. The ~10-second gap guarantees cache hits on the remaining 7, for roughly 7× the shared prefix in token savings.
+Why staggered: firing all 8 simultaneously creates a race — requests arriving in the same millisecond each do their own cache write (1.25× input cost) instead of a cache hit (0.1×). Waiting for spawn #1 to start streaming guarantees its cache is committed before the others arrive.
 
 ### Mandates
 
