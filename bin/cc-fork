@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -72,6 +73,21 @@ def find_parent_jsonl(project_dir: Path, explicit: str | None) -> Path:
 
 def new_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def acquire_project_lock(project_dir: Path, log):
+    """Exclusive flock on a per-project lock file. Serializes cc-fork runs in
+    the same project dir so their mtime-based cleanups can't eat each other's
+    fork/sidecar files. Returned file handle must stay open for the lock to hold.
+    """
+    lock_path = project_dir / ".cc-fork.lock"
+    lock_fh = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log(f"another cc-fork is running in {project_dir} — waiting for lock…")
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+    return lock_fh
 
 
 def run_fork(
@@ -166,6 +182,10 @@ def main() -> int:
     parent = find_parent_jsonl(project_dir, args.parent)
     log(f"parent session: {parent.name} ({parent.stat().st_size // 1024}K)")
 
+    # Hold an exclusive lock for the duration of this run so mtime-based
+    # cleanup can't delete a concurrent cc-fork's files.
+    lock_fh = acquire_project_lock(project_dir, log)
+
     start_time = time.time()
     fork_uuids = [new_uuid() for _ in args.tasks]
     for u in fork_uuids:
@@ -220,6 +240,7 @@ def main() -> int:
             t.join()
     finally:
         cleanup()
+        lock_fh.close()  # release flock
 
     if args.output_dir:
         out_dir = Path(args.output_dir)
