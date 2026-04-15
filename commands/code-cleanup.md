@@ -85,17 +85,6 @@ Before launching, offer two modes:
 
 Default to asking unless the user specified. If unsure which, recommend dry-run.
 
-### Mandates
-
-1. **Deduplicate.** Find repeated logic. Apply DRY only where it cuts real complexity — never abstraction for its own sake. Leave three-line repetition alone.
-2. **Consolidate types.** Find type definitions duplicated across files or packages. Move shared shapes to one source of truth. Update every import.
-3. **Dead code.** Run the tools the brief confirmed are installed. Remove unreferenced exports, files, and dependencies. Confirm each deletion with a grep across the full tree — tests, configs, dynamic imports included — before cutting.
-4. **Circular dependencies.** Run `madge --circular` / `pydeps` / equivalent from the brief. Break every cycle by inverting a dependency or extracting the shared piece. Do not mask cycles with lazy imports.
-5. **Weak types.** Find every `any`, `unknown`, `object`, `{}`, Python `Any`, Go `interface{}`, Rust `Box<dyn Any>`. For each one, read call sites, runtime values, and upstream package types. Replace with the real type. Typecheck must end green.
-6. **Defensive programming.** Find every `try`/`catch` and equivalent. Keep it only when it handles real external input, a documented failure mode, or a boundary the caller cannot cross. Delete empty catches, silent fallbacks, and speculative guards. Errors propagate or handle specifically — never swallow.
-7. **Legacy paths.** Find deprecated code, compat shims, fallback branches, `// TODO: remove after X` that outlived X, and feature flags long since defaulted. Delete them. Every path should be the single canonical path.
-8. **AI slop.** Remove narration comments ("now we do X"), "replaced old Y with new Z" notes, commented-out code, obvious-from-code comments, and stub scaffolds. Keep comments that explain *why*, constraints, or non-obvious invariants. Rewrite kept comments for a new reader — no references to prior versions or the author's process.
-
 ### Protocol (included in each spawn's prompt)
 
 1. **Research your scope.** Enumerate every instance. No sampling. The brief's "In-Scope" and "Out-of-Scope / Landmines" sections are authoritative for where to look.
