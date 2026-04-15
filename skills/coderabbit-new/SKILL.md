@@ -53,5 +53,5 @@ gh api repos/<owner>/<repo>/pulls/<pr-number>/comments \
 If you just want all unresolved CodeRabbit comments on a PR:
 ```bash
 gh api repos/<owner>/<repo>/pulls/<pr>/reviews \
-  --jq '[.[] | select(.user.login | test("coderabbit"; "i")) | {state: .state, body: .body, submitted_at: .submitted_at}]'
+  --jq '[.[] | select(.user.login | test("coderabbit|coderabbitai"; "i")) | {state: .state, body: .body, submitted_at: .submitted_at}]'
 ```

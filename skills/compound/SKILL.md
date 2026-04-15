@@ -39,7 +39,7 @@ No other files are written.
 
 ## Execution
 
-### Step 0: Dedup Check
+### Phase 0: Dedup Check
 
 Before launching research, search existing `memory/solution_*.md` files for a solution covering the same root cause. Grep for the affected component name and key error message or symptom in both filenames and `description:` frontmatter fields.
 
@@ -132,7 +132,7 @@ Add a pointer line following the existing format. Keep MEMORY.md as an index —
 | Phase 2 runs before Phase 1 completes | Wait for both subagents to succeed |
 | Vague description: "fixed a bug" | Specific: "CAN bus timing overflow in GCU shift logic at >8000 RPM" |
 | Writing without dedup check | Always check existing solutions first |
-| Adding pointer to full MEMORY.md | Check line count, warn if near 200 |
+| Adding pointer to full MEMORY.md | Check line count, warn at/above 190 |
 
 ## Success Output
 

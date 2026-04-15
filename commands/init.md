@@ -26,8 +26,8 @@ Initialize this project for Claude Code.
    - `composer.json` exists → `"image": "php:latest"`
    - `*.csproj` or `*.fsproj` exists → `"image": "mcr.microsoft.com/dotnet/sdk:latest"`
    - `Package.swift` exists → `"image": "swift:latest"`
-   - `package.json` exists → `"image": "node:stable"`
-   - **Default** → `"image": "node:stable"`
+   - `package.json` exists → `"image": "node:lts"`
+   - **Default** → `"image": "node:lts"`
 
    **devcontainer.json format:**
    ```json
