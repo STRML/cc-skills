@@ -1,12 +1,14 @@
 ---
-description: Deep codebase cleanup via eight parallel subagents that inherit this session's context. Each owns one concern — dedup, type consolidation, dead code, circular deps, weak types, defensive-programming cruft, legacy paths, AI slop. Uses cc-fork so spawns see the recon phase as live conversation, not a re-inlined brief.
+description: Deep codebase cleanup via eight parallel subagents that inherit this session's context. Each owns one concern — dedup, type consolidation, dead code, circular deps, weak types, defensive-programming cruft, legacy paths, AI slop. Uses native Agent forks so spawns see the recon phase as live conversation, not a re-inlined brief.
 ---
 
 # Code Cleanup
 
 Recon once in this session, then fan out to eight forked subagents that inherit the conversation. Reconcile their reports.
 
-**Dependency:** [`cc-fork`](https://github.com/STRML/cc-skills/tree/main/bin) on PATH. If it's missing, fall back to the Agent-tool recipe at the end.
+**Dependency:** none. Uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229), which inherits the full conversation and the prompt cache. The external `cc-fork` binary is no longer needed.
+
+**Cost note:** a fork inherits the parent model and ignores any `model` override. On an Opus 5 main loop that means eight Opus subagents — confirm with the user before dispatching. On a ds4 profile it is eight ds4 subagents reusing an already-cached prefix, which is close to free; dispatch without asking.
 
 ## Phase 1 — Recon (this session)
 
@@ -34,28 +36,45 @@ Ask the user:
 
 Default to dry-run if unclear.
 
-Then run:
+Then `mkdir -p .tmp/code-cleanup/reports` and dispatch all eight forks **in a single message** so they run concurrently.
 
-```bash
-mkdir -p .tmp/code-cleanup/reports
-cc-fork --output-dir .tmp/code-cleanup/reports \
-  "MODE=<edit|dry-run>. Mandate: Deduplicate. Find repeated logic across the codebase you've seen. Apply DRY only where it cuts real complexity — never abstraction for its own sake; leave three-line repetition alone. Write your assessment, changes (or proposed changes in dry-run), items skipped with reasons, and main-session follow-ups to your report file. End with one line: WROTE_REPORT." \
-  "MODE=<edit|dry-run>. Mandate: Consolidate types. Find type definitions duplicated across files or packages. Move shared shapes to one source of truth; update every import. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: Dead code. Run the tools we confirmed are installed. Remove unreferenced exports, files, and dependencies. Grep the full tree — tests, configs, dynamic imports included — before cutting. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: Circular dependencies. Run madge/pydeps/equivalent. Break every cycle by inverting a dependency or extracting the shared piece; do not mask with lazy imports. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: Weak types. Find every any/unknown/object/{}/Python Any/Go interface{}/Rust Box<dyn Any>. Read call sites and upstream types; replace with real types. Typecheck must end green. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: Defensive programming. Find every try/catch and equivalent. Keep only those handling real external input, documented failure modes, or caller-uncrossable boundaries. Delete empty catches, silent fallbacks, speculative guards. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: Legacy paths. Find deprecated code, compat shims, fallback branches, // TODO: remove after X that outlived X, feature flags long since defaulted. Delete. Every path should be the single canonical path. Report format same as above." \
-  "MODE=<edit|dry-run>. Mandate: AI slop. Remove narration comments, 'replaced old Y with new Z' notes, commented-out code, obvious-from-code comments, stub scaffolds. Keep comments that explain why, constraints, or non-obvious invariants — rewrite them for a new reader, no references to prior versions. Report format same as above."
+Spawn template, repeated once per mandate (`NN` = 01…08):
+
+```yaml
+Agent:
+  subagent_type: "fork"
+  name: "cleanup-NN-<concern>"
+  description: "<concern> cleanup"
+  prompt: |
+    MODE=<edit|dry-run>. <mandate text>
+
+    You inherited this session's recon phase — the tree, the build/typecheck/test commands,
+    the confirmed tool availability, and the landmine list are all above. Do not re-derive them.
+
+    Your plain-text output is NOT visible to the orchestrator. Write your full report to
+    `.tmp/code-cleanup/reports/fork-NN.md` — that file is authoritative. Cover: assessment,
+    changes made (or proposed, in dry-run), items skipped with reasons, and follow-ups for the
+    main session. End the file with one line: WROTE_REPORT.
 ```
 
-Substitute `edit` or `dry-run` for `<edit|dry-run>` in each task string before running.
+Substitute `edit` or `dry-run` for `<edit|dry-run>` in every spawn before dispatching.
 
-cc-fork snapshots this session's JSONL, spawns 8 parallel `claude --resume` instances (each starts with the full recon phase as inherited context), collects outputs into the report dir, and cleans up its fork JSONLs on exit.
+The eight mandates:
+
+1. **Deduplicate.** Find repeated logic across the codebase you've seen. Apply DRY only where it cuts real complexity — never abstraction for its own sake; leave three-line repetition alone.
+2. **Consolidate types.** Find type definitions duplicated across files or packages. Move shared shapes to one source of truth; update every import.
+3. **Dead code.** Run the tools we confirmed are installed. Remove unreferenced exports, files, and dependencies. Grep the full tree — tests, configs, dynamic imports included — before cutting.
+4. **Circular dependencies.** Run madge/pydeps/equivalent. Break every cycle by inverting a dependency or extracting the shared piece; do not mask with lazy imports.
+5. **Weak types.** Find every any/unknown/object/{}/Python Any/Go interface{}/Rust Box<dyn Any>. Read call sites and upstream types; replace with real types. Typecheck must end green.
+6. **Defensive programming.** Find every try/catch and equivalent. Keep only those handling real external input, documented failure modes, or caller-uncrossable boundaries. Delete empty catches, silent fallbacks, speculative guards.
+7. **Legacy paths.** Find deprecated code, compat shims, fallback branches, `// TODO: remove after X` that outlived X, feature flags long since defaulted. Delete. Every path should be the single canonical path.
+8. **AI slop.** Remove narration comments, "replaced old Y with new Z" notes, commented-out code, obvious-from-code comments, stub scaffolds. Keep comments that explain why, constraints, or non-obvious invariants — rewrite them for a new reader, with no references to prior versions.
+
+Each fork starts with the full recon phase as inherited context and reuses the cached prompt prefix, so the marginal cost of the eighth fork is far below the first. Forks run in the background by default; wait for all eight before reconciling. The report file existing and non-empty is the delivery signal — a fork that dies silently never returns, so check the files rather than waiting indefinitely.
 
 ## Phase 3 — Reconcile
 
-1. Read every file in `.tmp/code-cleanup/reports/fork-NN.out`. Full text — do not grep-skim.
+1. Read every file in `.tmp/code-cleanup/reports/fork-NN.md`. Full text — do not grep-skim.
 2. Surface each fork's findings inline for the user.
 3. Resolve overlapping edits if edit mode ran; prefer the more conservative change.
 4. Run full typecheck and test suite once more.
@@ -71,6 +90,8 @@ cc-fork snapshots this session's JSONL, spawns 8 parallel `claude --resume` inst
 - **Prove every fix.** Typecheck and tests pass after each batch, or the batch reverts.
 - **Shared tree.** In edit mode, 8 spawns edit one working copy. Expect conflicts; reconcile is not optional.
 
-## Fallback: no cc-fork
+## Fallback: Claude Code older than 2.1.229
 
-If cc-fork isn't installed, use the Agent tool with byte-identical prefix across 8 parallel spawns. The prefix must inline the full brief and protocol — forks don't see conversation history. Stagger spawn #1 until streaming confirms cache commit, then launch 2–8 in one message. This is the old recipe — inferior because each fork re-reads ambient context, but it works with zero install.
+`subagent_type: "fork"` does not exist before 2.1.229. Use `subagent_type: "general-purpose"` with a byte-identical prefix across the 8 parallel spawns. The prefix must inline the full brief and protocol, because a general-purpose subagent sees none of the conversation. Stagger spawn #1 until streaming confirms cache commit, then launch 2–8 in one message. Inferior — each spawn re-reads ambient context the recon phase already covered — but it works everywhere.
+
+The same fallback applies under `claude --print` and anywhere `--no-session-persistence` is set: fork needs a live session transcript to snapshot, so headless callers must inline the brief.
