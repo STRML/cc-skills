@@ -6,7 +6,7 @@ description: Deep codebase cleanup via eight parallel subagents that inherit thi
 
 Recon once in this session, then fan out to eight forked subagents that inherit the conversation. Reconcile their reports.
 
-**Dependency:** none. Uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229), which inherits the full conversation and the prompt cache. The external `cc-fork` binary is no longer needed.
+**Dependency:** none. Uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229), which inherits the full conversation and the prompt cache.
 
 **Cost note:** a fork inherits the parent model and ignores any `model` override. On an Opus 5 main loop that means eight Opus subagents — confirm with the user before dispatching. On a ds4 profile it is eight ds4 subagents reusing an already-cached prefix, which is close to free; dispatch without asking.
 
