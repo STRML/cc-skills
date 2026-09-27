@@ -56,11 +56,11 @@ git add <specific-files>   # never `git add .`
 git commit -m "<type>: <description>" -m "<optional body: why, not what>"
 ```
 
-Use **repeated `-m` flags** (one per paragraph) — NOT a `<<EOF` heredoc. The sandbox
-blocks heredocs, and a blocked heredoc is the #1 cause of falling back to a manual
-`git commit -F /tmp/...`, which is the bypass this skill exists to prevent. If the body
-is long or multi-paragraph, write it with the **Write tool** to a temp file and
-`git commit -F <file>` — still no heredoc, no `cat`/`sed` hacks.
+Use **repeated `-m` flags**, one per paragraph, for every message, however long. Git
+joins them with blank lines. A quoted `-m` string may contain literal newlines, so a
+bulleted paragraph stays one flag. Do not use a `<<EOF` heredoc (the sandbox blocks
+it), and do not write the message to a file for `git commit -F` (CLAUDE.md: "Do not
+write commit messages to `/tmp`"). No `cat`/`sed` hacks either.
 
 **5. Push only if explicitly requested**
 

@@ -1,6 +1,6 @@
 ---
 name: session-learnings
-description: End-of-session skill that captures lessons learned and updates project CLAUDE.md. Use before ending a session, before compacting context, or when explicitly asked to document learnings.
+description: End-of-session skill that captures lessons learned and updates the project's CLAUDE.md. Use before ending a session, before compacting context, or when asked to document learnings, in repos outside ~/git/rush (Rush repos use session-learnings-rush).
 version: "1.0.0"
 ---
 
@@ -89,7 +89,7 @@ Review the session for:
 ### Step 2: Check Existing CLAUDE.md
 ```bash
 # Check if project CLAUDE.md exists
-cat .claude/CLAUDE.md 2>/dev/null || echo "No project CLAUDE.md"
+ls CLAUDE.md AGENTS.md .claude/CLAUDE.md 2>/dev/null   # update the one that exists; create CLAUDE.md at the root only if none does
 ```
 
 ### Step 3: Update or Create

@@ -8,7 +8,7 @@ Recon once in this session, then fan out to eight forked subagents that inherit 
 
 **Dependency:** none. Uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229), which inherits the full conversation and the prompt cache.
 
-**Cost note:** a fork inherits the parent model and ignores any `model` override. On an Opus 5 main loop that means eight Opus subagents — confirm with the user before dispatching. On a ds4 profile it is eight ds4 subagents reusing an already-cached prefix, which is close to free; dispatch without asking.
+**Cost note:** a fork inherits the parent model and ignores any `model` override. On an Opus main loop that means eight Opus subagents — confirm with the user before dispatching. On a ds4 profile it is eight ds4 subagents reusing an already-cached prefix, which is close to free; dispatch without asking.
 
 ## Phase 1 — Recon (this session)
 
@@ -90,8 +90,8 @@ Each fork starts with the full recon phase as inherited context and reuses the c
 - **Prove every fix.** Typecheck and tests pass after each batch, or the batch reverts.
 - **Shared tree.** In edit mode, 8 spawns edit one working copy. Expect conflicts; reconcile is not optional.
 
-## Fallback: Claude Code older than 2.1.229
+## Fallback: no fork available
 
-`subagent_type: "fork"` does not exist before 2.1.229. Use `subagent_type: "general-purpose"` with a byte-identical prefix across the 8 parallel spawns. The prefix must inline the full brief and protocol, because a general-purpose subagent sees none of the conversation. Stagger spawn #1 until streaming confirms cache commit, then launch 2–8 in one message. Inferior — each spawn re-reads ambient context the recon phase already covered — but it works everywhere.
+Fork is unavailable in two cases: headless runs (below) and Claude Code older than 2.1.229. Use `subagent_type: "general-purpose"` with a byte-identical prefix across the 8 parallel spawns. The prefix must inline the full brief and protocol, because a general-purpose subagent sees none of the conversation. Stagger spawn #1 until streaming confirms cache commit, then launch 2–8 in one message. Inferior — each spawn re-reads ambient context the recon phase already covered — but it works everywhere.
 
 The same fallback applies under `claude --print` and anywhere `--no-session-persistence` is set: fork needs a live session transcript to snapshot, so headless callers must inline the brief.

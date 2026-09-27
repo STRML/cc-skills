@@ -1,6 +1,6 @@
 ---
 name: visual-css-refinement
-description: Screenshot-driven CSS/UI debugging loop. Use when making visual changes (CSS, styling, layout) that need verification. Takes before/after screenshots, tracks changes, and iterates until the user is satisfied.
+description: Screenshot-driven CSS/UI debugging loop. Use when making CSS, styling or layout changes that need visual verification, fixing a visual bug, or when the user says "screenshot it and look yourself" or "better but...". Takes before/after screenshots, tracks changes, and iterates until the user is satisfied.
 version: "1.0.0"
 ---
 
@@ -28,7 +28,7 @@ A structured workflow for iterative CSS/UI changes with visual verification. Pre
 ## Workflow
 
 ### Phase 1: Baseline
-1. **Take a "before" screenshot** using browser MCP or screenshot tool
+1. **Take a "before" screenshot** with a CLI browser tool such as the `agent-browser` skill (not a browser MCP server)
 2. **Document current state** - note what needs to change
 3. **Create a checklist** of specific visual issues to fix
 

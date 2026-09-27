@@ -1,11 +1,11 @@
 ---
 name: scan-diff
-description: "Use when scanning a git diff for bugs, logic errors, or security issues. Triggers: 'scan diff', 'check diff for bugs', 'review my changes', 'bug scan', 'scan for bugs'."
+description: "Quick first-pass bug scan of a git diff for logic errors and security issues. Use when asked to scan or bug-check a diff; open-ended review of changes belongs to code-review."
 ---
 
 # Scan Diff
 
-Scan the current git diff for bugs, logic errors, and security issues using a focused haiku subagent.
+Scan the current git diff for bugs, logic errors, and security issues using a focused Sonnet subagent (`model: "sonnet"`).
 
 ## Usage
 
@@ -32,7 +32,7 @@ git diff --cached
    git diff HEAD
    ```
 
-2. Pass it to a haiku subagent with this prompt:
+2. Pass it to a Sonnet subagent with this prompt:
 
    > You are a focused bug scanner. Review this git diff for: bugs and logic errors, off-by-one errors, null/undefined access, error handling gaps, security issues (injection, auth bypass, insecure defaults), and race conditions. Be terse. Only report issues you're confident about. Skip style issues. For each issue: file:line, one sentence description, suggested fix.
    >

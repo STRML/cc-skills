@@ -1,16 +1,16 @@
 ---
 name: compound
-description: Use when a problem has been solved to document the solution for future reference. Invoke manually with /compound after confirming a fix works. Writes a structured solution to project memory so future sessions automatically have it.
+description: Use when a problem has been solved to document the solution for future reference. Invoke manually with /compound after confirming a fix works. Saves a structured solution note to shared Mnemopi memory (through the cross-agent-context skill) so future sessions in Claude Code, OMP, or Codex can recall it.
 argument-hint: "[optional: brief context about the fix]"
 ---
 
 # /compound
 
-Document a recently solved problem, writing it into the project memory system where future sessions automatically load it.
+Document a recently solved problem as a durable note in shared Mnemopi memory, where future sessions recall it.
 
 ## Purpose
 
-Captures solutions while context is fresh. First occurrence takes research; documented, the next takes minutes. Solutions go into memory (auto-loaded every session), not a docs folder nobody reads.
+Captures solutions while context is fresh. First occurrence takes research; documented, the next takes minutes. Solutions go into shared memory, which every harness recalls, not a docs folder nobody reads.
 
 ## Usage
 
@@ -26,119 +26,85 @@ This skill is manual-only. Do not auto-invoke on conversational phrases.
 - Problem has been solved and solution verified working
 - Non-trivial problem (not a simple typo or obvious error)
 
-If preconditions aren't met, say so and stop. If unsure whether the fix is verified, ask.
+If preconditions aren't met, say so and stop. If you cannot tell whether the fix was verified, look in the conversation for a passing test or command output; if there is none, say the fix is unverified and stop.
 
 ## Output
 
-A single memory file in the project memory directory (path from system prompt context, e.g., `~/.claude/projects/<project-path>/memory/`):
+One Mnemopi note with `kind: "solution"` in the project's `retainBank`. No files are written. Legacy Markdown memory (`memory/MEMORY.md`, `memory/*.md`) is a migration source and is not written.
 
-- `memory/solution_<slug>.md` — structured solution with memory frontmatter
-- `memory/MEMORY.md` — pointer line added to index
-
-No other files are written.
+Load the `cross-agent-context` skill first if it is not loaded. Its `references/memory.md` has the tool arguments and the `shared-memory` CLI fallback.
 
 ## Execution
 
-### Phase 0: Dedup Check
+Do this in the main loop. The conversation is the source, and a fresh subagent cannot see it.
 
-Before launching research, search existing `memory/solution_*.md` files for a solution covering the same root cause. Grep for the affected component name and key error message or symptom in both filenames and `description:` frontmatter fields.
+### Step 1: Resolve the bank
 
-- **If a match is found:** show it to the user and ask whether to update the existing entry or create a new one. If updating, skip Phase 1 and edit the existing file directly.
-- **If no match:** proceed to Phase 1.
+Run `shared-memory context --cwd <absolute checkout path>`. In a git worktree, also run it for the main checkout and use the main checkout's `retainBank`, so the note is repository-wide.
 
-### Phase 1: Parallel Research
+### Step 2: Dedup check
 
-<critical_requirement>
-Subagents return TEXT DATA only. They must NOT use Write, Edit, or create any files. Only the orchestrator (Phase 2) writes files.
+Call `mnemopi_recall` on each `recallBanks` entry with the affected component name plus the key error message or symptom. Read promising hits in full with `mnemopi_get`.
 
-ALL subagents must succeed before Phase 2. If any subagent fails or times out, abort and report which failed and why.
-</critical_requirement>
+- **A note covers the same root cause:** replace it. Save the corrected note (Step 4) with the old ID in its metadata, verify it, then call `mnemopi_invalidate` with `replacement_id`. Say that you replaced an existing note.
+- **No match:** continue.
 
-Launch two subagents IN PARALLEL:
+### Step 3: Extract the solution
 
-#### 1. Problem & Solution Extractor
-- Extract from conversation history: problem type, component, symptoms, error messages
-- Analyze investigation steps tried (including dead ends)
-- Identify root cause with technical explanation
-- Extract working solution with code examples
-- Return: frontmatter fields + full solution content block
+From the conversation, collect:
 
-#### 2. Related Context & Prevention
-- Search project memory and codebase for related documentation (use `mgrep` if available, fall back to Grep/Glob)
-- Develop prevention strategies and test cases if applicable
-- Suggest tags for discoverability
-- Return: related links, prevention content, tags
+- Problem: exact error messages, observable behavior, component
+- Investigation: steps tried, including dead ends
+- Root cause, with a technical explanation
+- Working solution, with key code snippets
+- Prevention: how to avoid it, and a test that would catch it
+- References: related files, PRs, commits, issues. Search the codebase with Grep/Glob for related code if the conversation does not name it.
 
-### Phase 2: Assembly & Write
+### Step 4: Save the note
 
-**WAIT for both Phase 1 subagents to complete successfully.**
-
-#### Step 1: Generate slug
-
-Derive from the problem title:
-- Kebab-case, lowercase, max 50 characters
-- Strip filler words (the, a, an, in, for, etc.)
-- Example: "N+1 Query in Brief Generation" → `n-plus-1-query-brief-generation`
-
-Check for collision with existing `memory/solution_<slug>.md`. If collision, append `-2` (or `-3`, etc.).
-
-#### Step 2: Write the memory file
-
-Create `memory/solution_<slug>.md`:
+Call `mnemopi_remember` with `bank` set to the `retainBank`, `scope: "bank"`, `source: "claude-code"`, and content in this shape:
 
 ```markdown
----
-name: solution-<slug>
-description: <one-line description — specific enough for future sessions to judge relevance>
-type: project
----
+Solution: <one-line description, specific enough for future recall to judge relevance>
 
 ## Problem
-
 [Exact error messages, observable behavior]
 
 ## Root Cause
-
-[Technical explanation — be specific, this is the most valuable part]
+[Technical explanation. Be specific; this is the most valuable part]
 
 ## Solution
-
 [Concise fix with key code snippets]
 
 ## Prevention
-
 [How to avoid this in the future]
 
 ## References
-
-[Related files, PRs, commits, or other memory entries]
+[Related files, PRs, commits, issues]
 ```
 
-The `description` field determines whether future sessions find this. Be specific: "N+1 query in brief generation causing 30s page loads" not "performance issue fix".
+Metadata: `{ "cwd": "<checkout>", "kind": "solution", "task": "<slug>", "tags": [...], "recorded_at": "<ISO timestamp>" }`. The slug is kebab-case, lowercase, at most 50 characters, filler words stripped (e.g. "N+1 Query in Brief Generation" → `n-plus-1-query-brief-generation`).
 
-#### Step 3: Update MEMORY.md
+The first line decides whether future recall finds this. Be specific: "N+1 query in brief generation causing 30s page loads", not "performance issue fix".
 
-Check MEMORY.md line count first. If at or above 190 lines, warn the user that memory is near capacity and suggest pruning stale entries before adding more.
+### Step 5: Verify
 
-Create the memory directory if it doesn't exist (`mkdir -p`). Create MEMORY.md if absent.
-
-Add a pointer line following the existing format. Keep MEMORY.md as an index — no content, just links with brief descriptions.
+Check the returned `memory_id`, then `mnemopi_get` it. If the result is `mutation_committed_journal_incomplete`, do not retry; follow the recovery steps in `cross-agent-context/references/memory.md`. If both the MCP tools and the CLI fail, say persistence failed.
 
 ## Common Mistakes
 
 | Wrong | Correct |
 |-------|---------|
-| Subagents write files | Subagents return text; orchestrator writes |
-| Phase 2 runs before Phase 1 completes | Wait for both subagents to succeed |
-| Vague description: "fixed a bug" | Specific: "CAN bus timing overflow in GCU shift logic at >8000 RPM" |
-| Writing without dedup check | Always check existing solutions first |
-| Adding pointer to full MEMORY.md | Check line count, warn at/above 190 |
+| Writing to `memory/MEMORY.md` or `memory/solution_*.md` | Save to Mnemopi with `mnemopi_remember` |
+| Guessing the bank | Use `retainBank` from `shared-memory context` |
+| Vague first line: "fixed a bug" | Specific: "CAN bus timing overflow in GCU shift logic at >8000 RPM" |
+| Saving without a dedup recall | Recall first; replace and invalidate a matching note |
+| Claiming saved without checking | Verify the `memory_id` with `mnemopi_get` |
 
 ## Success Output
 
 ```
 Done — solution documented.
 
-Memory: memory/solution_<slug>.md
-MEMORY.md: pointer added ([N] lines, [capacity status])
+Memory: <bank> / <memory_id> (solution: <slug>)
 ```
