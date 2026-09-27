@@ -50,6 +50,6 @@ You're done when one of these is true:
 
 A `COMMENTED` state with only nitpicks is not done; run another round.
 
-**Rounds end at three**, the same cap CLAUDE.md § "Review rounds end at three" sets for the review scripts. If the third round still posts findings, stop, group every finding from every round by the mistake that produced it, name the step that would have caught each group in round 1, and report the groups and counts with a recommendation (merge with issues filed, one more round, or redesign). Sam decides.
+**Rounds end at three**, the same cap `~/.claude/docs/guardrails/review.md` § "Review rounds end at three" sets for the review scripts. If the third round still posts findings, stop, group every finding from every round by the mistake that produced it, name the step that would have caught each group in round 1, and report the groups and counts with a recommendation (merge with issues filed, one more round, or redesign). Sam decides.
 
 If CodeRabbit cannot review (fair-usage cap, rate limit, wedged), follow the `cr-check` skill's fallback: a review script exiting 0 on HEAD approves the merge the same as CodeRabbit's APPROVED.
