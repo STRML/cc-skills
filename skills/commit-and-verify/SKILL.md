@@ -34,7 +34,7 @@ skip the skill because the probes came back empty, and do not try to `cd` your w
 **2. Review changes**
 
 ### git status
-!`git rev-parse --git-dir >/dev/null 2>&1 && git status 2>&1 || echo "NOT-A-REPO: $(pwd) is not a git repository. Set REPO to the target repo and use 'git -C \"$REPO\"' for every git command below."`
+!`git rev-parse --git-dir >/dev/null 2>&1 && git status 2>&1 || echo "NOT-A-REPO: $PWD is not a git repository. Set REPO to the target repo and use 'git -C \"\$REPO\"' for every git command below."`
 
 ### git diff (staged + unstaged)
 !`git rev-parse --git-dir >/dev/null 2>&1 && git diff HEAD 2>&1 | head -200 || echo "(skipped: not a git repository in cwd)"`
