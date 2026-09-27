@@ -1,6 +1,6 @@
 ---
 name: session-learnings
-description: End-of-session skill that captures lessons learned and updates the project's CLAUDE.md. Use before ending a session, before compacting context, or when asked to document learnings, in repos outside ~/git/rush (Rush repos use session-learnings-rush).
+description: End-of-session skill that captures lessons learned and updates the project's CLAUDE.md. Use before ending a session, before compacting context, or when asked to document learnings, in repos outside ~/git/rush (Rush repos use the rush-auto-works:session-learnings plugin skill).
 version: "1.0.0"
 ---
 
