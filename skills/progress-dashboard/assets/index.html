@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0b0e; --card: #121216; --card-hi: #17171d; --line: #24242c; --line-soft: #1c1c23;
+    --text: #ececf1; --muted: #9a9aa6; --faint: #6c6c78;
+    --accent: #8b7cf6; --accent-bg: rgba(139,124,246,.14);
+    --ok: #34d399; --ok-bg: rgba(52,211,153,.12);
+    --warn: #f5a524; --warn-bg: rgba(245,165,36,.13);
+    --bad: #f87171; --bad-bg: rgba(248,113,113,.13);
+    --idle-bg: rgba(255,255,255,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 Inter, ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 44px 40px 56px; }
+  header { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; }
+  h1 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.4; max-width: 800px; letter-spacing: -.005em; }
+  .meta { margin-top: 10px; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .meta b { color: var(--text); font-weight: 500; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; border-radius: 999px;
+    padding: 3px 10px; font-size: 12.5px; font-weight: 500; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.big { padding: 5px 12px; font-size: 13.5px; }
+  .s-done, .s-on_track, .s-answered { color: var(--ok); background: var(--ok-bg); }
+  .s-doing { color: var(--accent); background: var(--accent-bg); }
+  .s-todo, .s-skipped { color: #b9b9c4; background: var(--idle-bg); }
+  .s-default, .s-at_risk, .s-waiting { color: var(--warn); background: var(--warn-bg); }
+  .s-blocked, .s-failed { color: var(--bad); background: var(--bad-bg); }
+  .s-finished { color: var(--ok); background: var(--ok-bg); }
+  .rule { height: 1px; background: var(--line-soft); margin: 22px 0 22px; position: relative; }
+  .rule i { position: absolute; left: 0; top: 0; height: 1px; background: var(--accent); }
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card); overflow: hidden; }
+  .tile { padding: 16px 18px 18px; border-left: 1px solid var(--line); min-width: 0; }
+  .tile:first-child { border-left: 0; }
+  .tile .k { color: var(--muted); font-size: 12.5px; }
+  .tile .v { margin-top: 6px; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+  .tile .v small { color: var(--muted); font-size: 14px; font-weight: 400; }
+  .tile .v.txt { font-size: 15px; font-weight: 500; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .n { margin-top: 4px; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .warn { color: var(--warn); } .tile .bad { color: var(--bad); }
+  .bar { height: 4px; border-radius: 3px; background: var(--line); margin-top: 12px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 22px; margin-top: 22px; align-items: start; }
+  .col { display: grid; gap: 22px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
+  .card > .hd { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 13px 18px; border-bottom: 1px solid var(--line-soft); font-weight: 600; }
+  .hd .cnt { display: inline-block; min-width: 20px; margin-left: 8px; padding: 0 6px; border-radius: 5px;
+    background: var(--accent-bg); color: var(--accent); font-size: 12px; font-weight: 500; text-align: center; }
+  .hd .cnt.zero { background: var(--idle-bg); color: var(--muted); }
+  .hd .side { color: var(--muted); font-weight: 400; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+  .hd .side .bar { width: 80px; margin: 0; }
+  .row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 12px; align-items: start;
+    padding: 12px 18px; border-top: 1px solid var(--line-soft); }
+  .row:first-of-type { border-top: 0; }
+  .row.doing { background: var(--card-hi); }
+  .row .num { color: var(--faint); padding-top: 1px; }
+  .row .t { font-weight: 500; }
+  .row .d { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .row .pill { margin-top: 1px; }
+  .q { padding: 13px 18px; border-top: 1px solid var(--line-soft); }
+  .q:first-of-type { border-top: 0; }
+  .q .top { display: flex; justify-content: space-between; gap: 12px; align-items: start; font-weight: 500; }
+  .q .dl { display: grid; grid-template-columns: 70px minmax(0,1fr); gap: 10px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+  .q .dl span:last-child { color: #cfcfd8; }
+  .arch { border-top: 1px solid var(--line-soft); }
+  .arch > summary { padding: 11px 18px; cursor: pointer; color: var(--muted); font-size: 13px; }
+  .arch .q:first-of-type { border-top: 1px solid var(--line-soft); }
+  .item { padding: 11px 18px; border-top: 1px solid var(--line-soft); display: flex; gap: 10px; align-items: baseline; }
+  .item:first-of-type { border-top: 0; }
+  .item .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; transform: translateY(-2px); }
+  .item .txt { flex: 1; min-width: 0; }
+  .item .when { color: var(--faint); font-size: 12px; white-space: nowrap; }
+  .item a { color: var(--accent); text-decoration: none; } .item a:hover { text-decoration: underline; }
+  .empty { padding: 14px 18px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .empty::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .segs { display: flex; gap: 4px; padding: 14px 18px 16px; }
+  .flow { margin-top: 22px; }
+  .waves { display: flex; align-items: stretch; gap: 0; padding: 16px 18px 18px; overflow-x: auto; }
+  .wave { flex: 1 1 0; min-width: 118px; max-width: 240px; display: flex; flex-direction: column; gap: 6px; }
+  .wave .wh { color: var(--muted); font-size: 12px; margin-bottom: 2px; white-space: nowrap; }
+  .wave .wh b { color: var(--accent); font-weight: 500; }
+  .arrow { flex: none; width: 20px; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 15px; padding-top: 18px; }
+  .chip { display: flex; gap: 7px; align-items: baseline; padding: 6px 9px; border-radius: 7px; background: var(--card-hi);
+    border: 1px solid var(--line-soft); font-size: 12.5px; min-width: 0; }
+  .chip b { color: var(--faint); font-weight: 500; flex: none; }
+  .chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip.done { border-color: rgba(52,211,153,.35); } .chip.done span { color: var(--muted); }
+  .chip.doing { border-color: var(--accent); background: var(--accent-bg); }
+  .chip.blocked { border-color: rgba(248,113,113,.5); }
+  .row .after { color: var(--faint); font-size: 12px; margin-top: 3px; }
+  .ans { display: flex; gap: 8px; margin-top: 10px; }
+  .ans input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; color: var(--text);
+    padding: 7px 10px; font: inherit; font-size: 13px; outline: none; }
+  .ans input:focus { border-color: var(--accent); }
+  .ans button { background: var(--card-hi); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 11px;
+    font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .ans button.go { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ans button:hover { filter: brightness(1.15); }
+  a.gh { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
+  a.gh:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .item a.gh { color: inherit; }
+  .hint { padding: 10px 18px 13px; color: var(--faint); font-size: 12px; border-top: 1px solid var(--line-soft); }
+  .segs i { flex: 1; height: 5px; border-radius: 3px; background: var(--line); }
+  .segs i.done { background: var(--ok); } .segs i.doing { background: var(--accent); } .segs i.blocked { background: var(--bad); }
+  .foot { margin-top: 26px; color: var(--faint); font-size: 12px; }
+  .stale { color: var(--warn); }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .strip { grid-auto-flow: row; } .tile { border-left: 0; border-top: 1px solid var(--line); } .tile:first-child { border-top: 0; } }
+  .loading { color: var(--muted); padding: 80px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="loading">Waiting for state.js…</div></div>
+<script>
+"use strict";
+// Renders window.DASH from state.js (written by dash.py). file:// cannot fetch JSON,
+// so state is re-read by re-injecting a cache-busted <script> every 10 s.
+const REFRESH_MS = 10000;
+let ARCH_OPEN = false;  // the answered-questions archive stays as Sam left it across refreshes
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LABEL = { done: "Done", doing: "In progress", todo: "To do", blocked: "Blocked", skipped: "Skipped",
+  on_track: "On track", at_risk: "At risk", finished: "Finished", default: "Using default", answered: "Answered", waiting: "Waiting" };
+const clock = d => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function ago(d) {
+  const s = Math.max(0, Math.round((Date.now() - d) / 1000));
+  if (s < 45) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h " + Math.round((s % 3600) / 60) + "m ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+function span(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return m + "m";
+  const h = Math.floor(m / 60);
+  return h < 24 ? h + "h " + (m % 60) + "m" : Math.floor(h / 24) + "d " + (h % 24) + "h";
+}
+// #N and owner/repo#N become GitHub links (issues/N redirects to pull/N for a PR).
+let GH = "";
+function linkify(html) {
+  const a = (slug, n, label) => `<a class="gh" href="https://github.com/${slug}/issues/${n}" target="_blank" rel="noopener">${label}</a>`;
+  html = html.replace(/(^|[^\w/])([\w.-]+\/[\w.-]+)#(\d+)\b/g, (m, pre, slug, n) => pre + a(slug, n, slug + "#" + n));
+  if (GH) html = html.replace(/(^|[^\w&/>"])#(\d+)\b/g, (m, pre, n) => pre + a(GH, n, "#" + n));
+  return html;
+}
+const tx = s => linkify(esc(s));
+const when = iso => iso ? clock(new Date(iso)) : "";
+const pill = (st, big) => `<span class="pill ${big ? "big " : ""}s-${esc(st)}">${esc(LABEL[st] || st)}</span>`;
+const bar = (n, d) => `<div class="bar"><i style="width:${d ? Math.round(100 * n / d) : 0}%"></i></div>`;
+// Served by `dash.py serve` (http) the page can post answers; opened as a file it is read-only.
+const LIVE = location.protocol.startsWith("http");
+
+// Waves: a task with no `after` is wave 1; otherwise one past its latest dependency.
+// Tasks in one wave can run in parallel; waves run in series.
+let CYCLE = false;
+function waves(tasks) {
+  CYCLE = false;
+  const lvl = new Array(tasks.length).fill(-1), seen = new Set();
+  const level = i => {
+    if (lvl[i] >= 0) return lvl[i];
+    if (seen.has(i)) { CYCLE = true; return 0; }
+    seen.add(i);
+    const deps = (tasks[i].after || []).map(n => n - 1).filter(j => j >= 0 && j < tasks.length && j !== i);
+    return (lvl[i] = deps.length ? 1 + Math.max(...deps.map(level)) : 0);
+  };
+  tasks.forEach((_, i) => level(i));
+  const cols = [];
+  lvl.forEach((l, i) => (cols[l] = cols[l] || []).push(i));
+  return cols.filter(Boolean);
+}
+
+function flowCard(tasks) {
+  if (!tasks.some(t => (t.after || []).length)) return "";
+  const cols = waves(tasks);
+  const par = cols.filter(c => c.length > 1).length;
+  const body = cols.map((c, w) => {
+    const allDone = c.every(i => ["done", "skipped"].includes(tasks[i].status));
+    const chips = c.map(i => `<div class="chip ${esc(tasks[i].status)}" title="${esc(tasks[i].title)}${tasks[i].detail ? " — " + esc(tasks[i].detail) : ""}"><b>${i + 1}</b><span>${tx(tasks[i].title)}</span></div>`).join("");
+    return `${w ? `<div class="arrow">→</div>` : ""}<div class="wave"><div class="wh">Step ${w + 1} · ${c.length > 1 ? `<b>${c.length} in parallel</b>` : "serial"}${allDone ? " · done" : ""}</div>${chips}</div>`;
+  }).join("");
+  if (CYCLE) return `<div class="card flow"><div class="hd"><span>Flow</span></div><div class="hint" style="color:var(--bad)">The task dependencies contain a cycle, so no order can be drawn. Fix them with dash.py dep.</div></div>`;
+  return `<div class="card flow"><div class="hd"><span>Flow</span><span class="side">${cols.length} steps in series · ${par} with parallel work</span></div><div class="waves">${body}</div></div>`;
+}
+
+async function sendAnswer(qid, text) {
+  text = (text || "").trim();
+  if (!text) return;
+  const r = await fetch("/api/answer", { method: "POST", headers: { "Content-Type": "application/json", "X-Dash": "1" },
+    body: JSON.stringify({ id: qid, answer: text }) });
+  if (!r.ok) { alert("Answer not saved (" + r.status + ")"); return; }
+  load(true);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-q]");
+  if (!b) return;
+  const q = b.dataset.q;
+  sendAnswer(q, b.dataset.default != null ? "Go with the default: " + b.dataset.default : document.getElementById("a-" + q).value);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.matches("input[data-qa]")) sendAnswer(e.target.dataset.qa, e.target.value);
+});
+document.addEventListener("toggle", e => {
+  if (e.target.classList && e.target.classList.contains("arch")) ARCH_OPEN = e.target.open;
+}, true);
+
+function render(S) {
+  GH = S.github || "";
+  const tasks = S.tasks || [], qs = S.questions || [], blockers = (S.blockers || []).filter(b => !b.cleared);
+  const done = tasks.filter(t => t.status === "done" || t.status === "skipped").length;
+  const cur = tasks.find(t => t.status === "doing");
+  const curIdx = cur ? tasks.indexOf(cur) + 1 : 0;
+  const open = qs.filter(q => q.status !== "answered");
+  const started = S.started ? new Date(S.started) : null, updated = S.updated ? new Date(S.updated) : null;
+  const running = started ? span((S.status === "finished" && updated ? updated : Date.now()) - started) : "";
+  const staleMin = updated ? (Date.now() - updated) / 60000 : 0;
+
+  const tiles = [
+    `<div class="tile"><div class="k">Tasks done</div><div class="v">${done} <small>/ ${tasks.length}</small></div>${bar(done, tasks.length)}</div>`,
+    `<div class="tile" style="grid-column:span 2"><div class="k">Working on</div><div class="v txt">${tx(cur ? cur.title : (done === tasks.length && tasks.length ? "All tasks done" : "Nothing in progress"))}</div><div class="n">${cur ? `Task ${curIdx} of ${tasks.length}` : ""}</div></div>`,
+    ...(S.metrics || []).slice(0, 2).map(m => `<div class="tile"><div class="k">${esc(m.label)}</div><div class="v">${esc(m.value)}${m.total != null ? ` <small>/ ${esc(m.total)}</small>` : ""}</div>${m.total ? bar(Number(m.value) || 0, Number(m.total)) : `<div class="n">${esc(m.note || "")}</div>`}</div>`),
+    `<div class="tile"><div class="k">Waiting on you</div><div class="v"><span class="${open.length ? "warn" : ""}">${open.length}</span> <small>question${open.length === 1 ? "" : "s"}</small></div><div class="n">${open.length ? "Defaults in use" : "Nothing pending"}</div></div>`,
+    `<div class="tile"><div class="k">Blockers</div><div class="v"><span class="${blockers.length ? "bad" : ""}">${blockers.length}</span></div><div class="n">${blockers.length ? tx(blockers[0].text) : "Clear"}</div></div>`,
+  ];
+
+  const taskRows = tasks.map((t, i) => `<div class="row ${t.status === "doing" ? "doing" : ""}">
+      <div class="num">${i + 1}</div>
+      <div><div class="t">${tx(t.title)}</div>${t.detail ? `<div class="d">${tx(t.detail)}</div>` : ""}${(t.after || []).length ? `<div class="after">after task ${t.after.join(", ")}</div>` : ""}</div>
+      ${pill(t.status)}</div>`).join("");
+
+  const qRow = q => `<div class="q"><div class="top"><div>${tx(q.q)}</div>${pill(q.status === "answered" ? "answered" : "default")}</div>
+      <div class="dl"><span>${q.status === "answered" ? "Answer" : "Default"}</span><span>${tx(q.status === "answered" ? q.answer : q.default)}</span></div>
+      ${LIVE && q.status !== "answered" ? `<div class="ans"><input id="a-${esc(q.id)}" data-qa="${esc(q.id)}" placeholder="Type your answer, Enter to send">
+        <button class="go" data-q="${esc(q.id)}">Send</button><button data-q="${esc(q.id)}" data-default="${esc(q.default)}">Use default</button></div>` : ""}</div>`;
+  // Open questions on top, newest first; answered ones fold into an archive.
+  const archived = qs.filter(q => q.status === "answered").reverse();
+  const qRows = open.slice().reverse().map(qRow).join("")
+    + (archived.length ? `<details class="arch"${ARCH_OPEN ? " open" : ""}><summary>Answered (${archived.length})</summary>${archived.map(qRow).join("")}</details>` : "");
+
+  const bRows = blockers.map(b => `<div class="item"><span class="dot" style="background:var(--bad)"></span><span class="txt">${tx(b.text)}</span><span class="when">since ${when(b.at)}</span></div>`).join("");
+
+  const deliv = (S.deliverables || []).slice(-8).reverse().map(d => `<div class="item"><span class="dot" style="background:var(--ok)"></span>
+      <span class="txt">${d.link ? `<a href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.text)}</a>` : tx(d.text)}</span><span class="when">${when(d.at)}</span></div>`).join("");
+
+  const log = (S.log || []).slice(-8).reverse().map(l => `<div class="item"><span class="dot" style="background:var(--faint)"></span><span class="txt">${tx(l.text)}</span><span class="when">${when(l.at)}</span></div>`).join("");
+
+  const nq = open.length;
+  document.title = `${nq ? "(" + nq + ") " : ""}${S.repo ? S.repo + " · " : ""}${done}/${tasks.length} · ${S.short || S.title || "Dashboard"}`;
+  document.getElementById("app").innerHTML = `
+    <header>
+      <div><h1>${tx(S.title)}</h1>
+        <div class="meta">${S.repo ? `<span><b>${esc(S.repo)}</b></span>` : ""}${S.context ? `<span>${tx(S.context)}</span>` : ""}
+          ${started ? `<span>Started <b>${clock(started)}</b></span><span>Running <b>${running}</b></span>` : ""}
+          ${updated ? `<span class="${staleMin > 30 && S.status !== "finished" ? "stale" : ""}">Updated <b>${clock(updated)}</b> · ${ago(updated)}</span>` : ""}</div></div>
+      ${pill(S.status || "on_track", true)}
+    </header>
+    <div class="rule"><i style="width:${tasks.length ? Math.round(100 * done / tasks.length) : 0}%"></i></div>
+    <div class="strip">${tiles.join("")}</div>
+    ${flowCard(tasks)}
+    <div class="grid">
+      <div class="col">
+        <div class="card"><div class="hd"><span>Tasks</span><span class="side">${done} of ${tasks.length} done ${bar(done, tasks.length)}</span></div>${taskRows || `<div class="empty">No tasks yet</div>`}</div>
+        ${log ? `<div class="card"><div class="hd"><span>Activity</span></div>${log}</div>` : ""}
+      </div>
+      <div class="col">
+        <div class="card"><div class="hd"><span>Questions for you<span class="cnt ${nq ? "" : "zero"}">${nq}</span></span></div>${nq ? "" : `<div class="empty">No open questions</div>`}${qRows}${!LIVE && nq ? `<div class="hint">Run <code>dash.py serve</code> and open its URL to answer here.</div>` : ""}</div>
+        <div class="card"><div class="hd"><span>Blockers<span class="cnt ${blockers.length ? "" : "zero"}">${blockers.length}</span></span></div>${bRows || `<div class="empty">Nothing blocked</div>`}</div>
+        <div class="card"><div class="hd"><span>Latest deliverables</span><span class="side">${(S.deliverables || []).length} total</span></div>${deliv || `<div class="empty">None yet</div>`}
+          <div class="segs">${tasks.map(t => `<i class="${esc(t.status)}"></i>`).join("")}</div></div>
+      </div>
+    </div>
+    <div class="foot">Refreshes every 10 s · page clock ${clock(new Date())}</div>`;
+}
+
+function load(force) {
+  const old = document.getElementById("state");
+  const s = document.createElement("script");
+  s.id = "state";
+  s.src = "state.js?t=" + Date.now();
+  // Don't redraw over an answer Sam is typing.
+  const typing = () => !force && [...document.querySelectorAll("input[data-qa]")].some(i => i === document.activeElement || i.value);
+  s.onload = s.onerror = () => { if (window.DASH && !typing()) render(window.DASH); };
+  if (old) old.remove();
+  document.head.appendChild(s);
+}
+load();
+setInterval(() => load(), REFRESH_MS);
+</script>
+</body>
+</html>
