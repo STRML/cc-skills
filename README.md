@@ -84,6 +84,10 @@ Pre-commit verification workflow. Checks for pre-commit hooks first (skips redun
 
 Screenshot-driven loop for CSS/UI work. Forces a "before" screenshot baseline, then iterates: change → screenshot → compare → confirm. Prevents blind edits and the "I think it should look better now" failure mode. Includes responsive-breakpoint verification.
 
+### `session-close-sweep`
+
+End-of-session audit for a repo with a GitHub tracker. It lists every open issue, checks each against origin/main and production, closes the stale ones with an evidence comment, and batches the ones that need an owner decision into a single question. It also checks git state (dirty tree, unpushed commits, leftover worktrees and stashes), flags docs the session contradicted, and offers to keep the scripts and gotchas the session produced. Ends with a closed/remains report. Needs the `gh` CLI.
+
 ### `progress-dashboard`
 
 A live HTML dashboard for long agent runs: an epic, a PR landing queue, hours of autonomous work. `scripts/dash.py` is the only writer (locked, atomic, safe for a main session and subagents at once); `dash.py serve` puts the page on `127.0.0.1` and it refreshes every 10 seconds. It shows task progress with a dependency-driven Flow panel, open questions (each with the default the agent proceeds on, newest first, answered ones folded away), blockers, deliverables, two metric tiles and an activity log. Answers typed on the page come back to the agent on its next `dash.py` command. State lives in `<repo>/.dashboard/` and stays out of git. Standard library Python 3, no dependencies.
