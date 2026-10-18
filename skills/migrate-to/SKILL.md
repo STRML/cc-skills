@@ -18,7 +18,7 @@ files, transcript, memory, file history) ─▶ sync the other repos the session
 ─▶ cmux pane beside this one (no focus change): ssh -t host → that window ─▶ notify
 ```
 
-Requirements: cmux, jq, rsync, git, and uuidgen here; bash, claude (signed in to the same account, for Remote Control), tmux, git, and rsync on the host; ssh to the host without prompts (keys or an agent). The script checks all of them first and names anything missing. `jq` on the host is optional; without it the folder-trust prompt shows in the pane on a first visit.
+Requirements: cmux, jq, rsync, git, and uuidgen here; bash, claude (signed in to the same account, for Remote Control), tmux, git, and rsync on the host; ssh to the host without prompts (keys or an agent); the same home path on both machines, since repos land at their local absolute paths. The script checks all of them first and names anything missing. `jq` on the host is optional; without it the folder-trust prompt shows in the pane on a first visit.
 
 ## Hosts
 
@@ -38,7 +38,7 @@ Requirements: cmux, jq, rsync, git, and uuidgen here; bash, claude (signed in to
 ## List and clean up
 
 - `migrate-to.sh list <host>` prints one row per migrated window: tmux window id (`@N`, stable) and index, name, fork id, the source session it was forked from (from this machine's history log), and its cwd. It also counts the per-pane view sessions. Run it whenever the user asks what is running on a host or which session is which, and before any clean. Indexes can shift between calls (hosts with `renumber-windows on`), so target by id, name, or fork id.
-- `migrate-to.sh clean <host> <target...>` kills each matching window and its claude, and closes the cmux panes showing it. A target can be a window id, an index, a name, a fork-id prefix of at least 4 characters, or `--all`. It also drops this machine's stale copy of each fork, and kills any view session with no pane attached. The host keeps each fork's transcript, so `claude --resume <fork-id>` there still brings one back.
+- `migrate-to.sh clean <host> <target...>` kills each matching migrated window and its claude (windows opened by hand in `migrate` are never touched), and closes the cmux panes showing it. A target can be a window id, an index, a name, a fork-id prefix of at least 4 characters, or `--all`. It also drops this machine's stale copy of each fork, and kills any view session with no pane attached. The host keeps each fork's transcript, so `claude --resume <fork-id>` there still brings one back.
 - Before cleaning, show the user the `list` rows that will go, unless they named the exact targets or said "all". Killing a window ends that agent mid-work.
 
 ## Notes

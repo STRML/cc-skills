@@ -18,10 +18,10 @@ set -euo pipefail
 TMUX_SESSION=migrate
 STATE="$HOME/.cache/migrate-to"
 ALIASES="${XDG_CONFIG_HOME:-$HOME/.config}/migrate-to/hosts"
-# Non-interactive ssh often gets a bare PATH; the host's tools usually live in one of these.
-# Single-quoted so the host's shell expands $HOME.
+# Prepended on the host: non-interactive ssh often gets a bare PATH, and the tools usually
+# live in one of these.
 # shellcheck disable=SC2016
-RPATH='$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+RPATH='export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"'
 
 die() { echo "migrate-to: $*" >&2; exit 1; }
 log() { echo "[$(date +%H:%M:%S)] $*"; }
@@ -32,11 +32,15 @@ resolve_host() {
   echo "${dest:-$1}"
 }
 
-# rsh never reads stdin, so it is safe inside `while read` loops; rsh_in forwards it.
-# rx runs a command on the host with the tool PATH above.
-rsh_in() { ssh -o ConnectTimeout=10 -o BatchMode=yes "$HOST" "$@"; }
-rsh() { rsh_in "$@" < /dev/null; }
-rx() { rsh env "PATH=$RPATH" "$@"; }
+# Run a bash script, read from stdin, on the host. Arguments never pass through the host's
+# login shell (which may be fish or zsh): ssh only ever runs `bash -s`.
+rbash() { ssh -o ConnectTimeout=10 -o BatchMode=yes "$HOST" bash -s; }
+
+# rx runs one command on the host, each argument quoted for bash with %q. Its stdin is the
+# script, so it is safe inside `while read` loops.
+rx() {
+  { echo "$RPATH"; printf 'exec'; printf ' %q' "$@"; echo; } | rbash
+}
 
 trash_paths() {
   if command -v trash > /dev/null; then trash "$@" 2> /dev/null || true; else rm -rf -- "$@"; fi
@@ -50,8 +54,9 @@ trash_fork_local() {
 
 check_host() {
   local missing
-  rsh true || die "cannot reach $HOST over ssh (BatchMode: keys or an agent must work without prompts)"
-  missing=$(rx sh -c "'for t in bash claude tmux git rsync; do command -v \$t > /dev/null || echo \$t; done'")
+  rx true || die "cannot reach $HOST over ssh (BatchMode: keys or an agent must work without prompts)"
+  # shellcheck disable=SC2016
+  missing=$(rx sh -c 'for t in claude tmux git rsync; do command -v "$t" > /dev/null || echo "$t"; done')
   [[ -z "$missing" ]] || die "missing on $HOST: $(echo "$missing" | tr '\n' ' ')"
   for t in cmux jq rsync git uuidgen; do
     command -v "$t" > /dev/null || die "missing locally: $t"
@@ -65,10 +70,10 @@ seed_repo() {
   top=$(git -C "$1" rev-parse --show-toplevel)
   common=$(cd "$top" && cd "$(git rev-parse --git-common-dir)" && pwd)
   main=$(dirname "$common")
-  if rsh test -e "$main/.git"; then return 0; fi
-  rsh test ! -e "$main" || die "$main exists on $HOST but is not a git repo"
+  if rx test -e "$main/.git"; then return 0; fi
+  rx test ! -e "$main" || die "$main exists on $HOST but is not a git repo"
   log "seeding $main on $HOST"
-  rsh mkdir -p "$main"
+  rx mkdir -p "$main"
   rsync -a "$common/" "$HOST:$main/.git/"
   rx git -C "$main" checkout -q -f HEAD
 }
@@ -102,23 +107,22 @@ discover_repos() {
 
 # True when the host has no copy of the repo yet or its copy has no uncommitted work.
 host_repo_clean() {
-  rsh test ! -e "$1/.git" || [[ -z "$(rx git -C "$1" status --porcelain)" ]]
+  rx test ! -e "$1/.git" || [[ -z "$(rx git -C "$1" status --porcelain)" ]]
 }
 
 # Mirror a repo that is not the session's cwd: git state, then working-tree changes.
 # The caller checks host_repo_clean first, since uncommitted host work would be overwritten.
 sync_repo() {
-  local top common list f
+  local top common list f gone=()
   top=$(git -C "$1" rev-parse --show-toplevel)
   common=$(cd "$top" && cd "$(git rev-parse --git-common-dir)" && pwd)
   seed_repo "$top"
   log "syncing $top"
   # The host checkout is clean, so its tracked files are its whole non-ignored tree.
   # Any of them missing here was deleted here (or by a commit the host lacks).
-  list=$(mktemp)
-  rx git -C "$top" ls-files | while IFS= read -r f; do
-    [[ -e "$top/$f" ]] || printf '%s\0' "$top/$f"
-  done > "$list"
+  while IFS= read -r f; do
+    [[ -e "$top/$f" ]] || gone+=("$top/$f")
+  done < <(rx git -C "$top" ls-files)
   if [[ "$common" == "$top/.git" ]]; then
     rsync -a "$common/" "$HOST:$common/"
   else
@@ -126,7 +130,8 @@ sync_repo() {
     rsync -a "$top/.git" "$HOST:$top/"
   fi
   rx git -C "$top" checkout-index -a -f
-  if [[ -s "$list" ]]; then rsh_in xargs -0 rm -f -- < "$list"; fi
+  if [[ ${#gone[@]} -gt 0 ]]; then rx rm -f -- "${gone[@]}"; fi
+  list=$(mktemp)
   { git -C "$top" diff --name-only --diff-filter=d; git -C "$top" ls-files -o --exclude-standard; } > "$list"
   if [[ -s "$list" ]]; then rsync -a --files-from="$list" "$top/" "$HOST:$top/"; fi
   rm -f "$list"
@@ -156,11 +161,11 @@ fork_transcript() {
 # Start the fork as a window of the shared tmux session on the host, install the attach
 # script, and print the window index.
 remote_launch() {
-  local name=$1 dir=$2 id=$3
-  rsh_in bash -s -- "$name" "$dir" "$id" "$TMUX_SESSION" << 'REMOTE'
+  # The arguments ride in the script as a %q-quoted `set --` line.
+  { printf 'set --'; printf ' %q' "$1" "$2" "$3" "$TMUX_SESSION"; echo; echo "$RPATH"
+    cat << 'REMOTE'
 set -euo pipefail
 name=$1 dir=$2 id=$3 S=$4
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 claude=$(command -v claude)
 TMUX=$(command -v tmux)
 # Each pane attaches through its own grouped view of the shared session, so switching
@@ -181,7 +186,7 @@ fi
 # `cmux session move` starts its own `claude --resume`; this one replaces it.
 pkill -f "claude --resume $id" || true
 sleep 1
-cmd="$claude --resume $id --remote-control $name"
+cmd=$(printf '%q ' "$claude" --resume "$id" --remote-control "$name")
 # Window ids (@N) are stable; indexes shift when the host has renumber-windows on.
 if "$TMUX" has-session -t "=$S" 2> /dev/null; then
   wid=$("$TMUX" new-window -P -F '#{window_id}' -t "$S:" -n "$name" -c "$dir" "$cmd")
@@ -192,6 +197,7 @@ fi
 "$TMUX" set-option -w -t "$wid" @migrate_fork "$id"
 echo "WID=$wid"
 REMOTE
+  } | rbash
 }
 
 open_pane() {
@@ -202,10 +208,18 @@ open_pane() {
     || cmux new-workspace --name "$name" --focus false --command "$attach"
 }
 
-# Migrated windows on the host, one per line: window_id|index|name|fork|cwd.
+# Migrated windows on the host, one per line: window_id|index|name|fork|cwd. Windows
+# without the fork tag (opened by hand in the session) are left out, so clean never
+# touches them.
 remote_windows() {
-  rx "tmux list-windows -t =$TMUX_SESSION -F '#{window_id}|#{window_index}|#{window_name}|#{@migrate_fork}|#{pane_current_path}'" \
-    2> /dev/null || true
+  rx tmux list-windows -t "=$TMUX_SESSION" \
+    -F '#{window_id}|#{window_index}|#{window_name}|#{@migrate_fork}|#{pane_current_path}' \
+    2> /dev/null | awk -F'|' '$4 != ""' || true
+}
+
+# View sessions on the host: name and current window id, or name and attached count.
+remote_views() {
+  rx tmux ls -F "#{session_name} $1" 2> /dev/null | awk -v p="^$TMUX_SESSION-view-" '$1 ~ p' || true
 }
 
 # The source session a fork came from, from the local history log.
@@ -218,9 +232,9 @@ cmd_list() {
   local wid idx name fork cwd
   printf '%-5s %-6s %-24s %-38s %-38s %s\n' ID INDEX NAME FORK SOURCE CWD
   while IFS='|' read -r wid idx name fork cwd; do
-    printf '%-5s %-6s %-24s %-38s %-38s %s\n' "$wid" "$idx" "$name" "${fork:--}" "$(fork_source "$fork")" "$cwd"
+    printf '%-5s %-6s %-24s %-38s %-38s %s\n' "$wid" "$idx" "$name" "$fork" "$(fork_source "$fork")" "$cwd"
   done < <(remote_windows)
-  echo "views: $(rx "tmux ls -F '#{session_name}'" 2> /dev/null | grep -c "^$TMUX_SESSION-view-" || true)"
+  echo "views: $(remote_views '#{session_attached}' | grep -c . || true)"
 }
 
 # Kill the matching windows (and their claude), drop this machine's stale copies of those
@@ -233,25 +247,20 @@ cmd_clean() {
     hit=""
     for t in "$@"; do
       [[ "$t" == --all || "$t" == "$idx" || "$t" == "$name" || "$t" == "$wid" ]] && hit=1
-      [[ -n "$fork" && ${#t} -ge 4 && "$fork" == "$t"* ]] && hit=1
+      [[ ${#t} -ge 4 && "$fork" == "$t"* ]] && hit=1
     done
     [[ -n "$hit" ]] || continue
     # A pane's view would just move on to another window, so end the views showing this
     # one first; their ssh exits and cmux closes the panes.
-    rx "tmux ls -F '#{session_name} #{window_id}'" 2> /dev/null \
-      | awk -v p="^$TMUX_SESSION-view-" -v w="$wid" '$1 ~ p && $2 == w { print $1 }' \
+    remote_views '#{window_id}' | awk -v w="$wid" '$2 == w { print $1 }' \
       | while IFS= read -r t; do rx tmux kill-session -t "=$t"; done
     rx tmux kill-window -t "$wid"
-    if [[ -n "$fork" ]]; then
-      # "resum[e]" so the pattern does not match the shell running pkill itself.
-      rx pkill -f "'claude --resum[e] $fork'" || true
-      trash_fork_local "$fork"
-    fi
-    echo "CLEANED window $idx ($name) fork=${fork:--}"
+    rx pkill -f "claude --resume $fork" || true
+    trash_fork_local "$fork"
+    echo "CLEANED window $idx ($name) fork=$fork"
     n=$((n + 1))
   done < <(remote_windows)
-  rx "tmux ls -F '#{session_name} #{session_attached}'" 2> /dev/null \
-    | awk -v p="^$TMUX_SESSION-view-" '$1 ~ p && $2 == 0 { print $1 }' \
+  remote_views '#{session_attached}' | awk '$2 == 0 { print $1 }' \
     | while IFS= read -r t; do rx tmux kill-session -t "=$t"; echo "CLEANED view $t"; done
   [[ $n -gt 0 ]] || echo "no migrated window matched: $*"
 }
@@ -270,9 +279,9 @@ cmd_migrate() {
   transcript=$(find "$HOME/.claude/projects" -maxdepth 2 -name "$id.jsonl" | head -1)
   [[ -n "$transcript" ]] || die "no transcript for session $id"
   check_host
-  # shellcheck disable=SC2016
-  [[ ${#repos[@]} -eq 0 || "$(rsh 'echo $HOME')" == "$HOME" ]] \
-    || die "home differs on $HOST; extra repos need the same absolute paths"
+  # Repos are seeded, synced and launched at their local absolute paths.
+  [[ "$(rx printenv HOME)" == "$HOME" ]] \
+    || die "home on $HOST is not $HOME; repos must live at the same absolute paths there"
 
   fork=$(uuidgen | tr '[:upper:]' '[:lower:]')
   log "forking session $id as $fork"
@@ -282,14 +291,17 @@ cmd_migrate() {
   trap "trash_fork_local '$fork'" EXIT
   # cmux moves and resumes in the fork's latest cwd, not the one the session started in.
   cwd=$(jq -r 'select(.cwd) | .cwd' "$(dirname "$transcript")/$fork.jsonl" | tail -1)
-  [[ -n "$name" ]] || name=$(basename "$cwd" | tr -c 'A-Za-z0-9_.-' '-' | sed 's/-*$//')
+  [[ "$cwd" != *[[:space:]]* ]] || die "cmux session move does not support whitespace in the cwd: $cwd"
+  # The name becomes a tmux window name and part of a shell command on the host.
+  [[ -n "$name" ]] || name=$(basename "$cwd")
+  name=$(printf '%s' "$name" | tr -c 'A-Za-z0-9_.-' '-')
 
   local code_flag=(--no-code)
   if top=$(git -C "$cwd" rev-parse --show-toplevel 2> /dev/null); then
     code_flag=()
     seed_repo "$cwd"
   else
-    rsh mkdir -p "$cwd"
+    rx mkdir -p "$cwd"
   fi
 
   local out ws
