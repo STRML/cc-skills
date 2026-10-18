@@ -33,13 +33,13 @@ skills/     Skills — invoke via the Skill tool
 
 | Name | Type | What it does |
 |---|---|---|
-| [`/code-cleanup`](commands/code-cleanup.md) | command | Eight parallel forks clean up one concern each: duplication, dead code, weak types, AI slop |
+| [`/code-cleanup`](commands/code-cleanup.md) | command | Maps the repo once, then forks eight cache-sharing subagents, one per concern (dead code, weak types, AI slop, ...) |
 | [`/check-pr-reviews`](commands/check-pr-reviews.md) | command | Fetch and address review comments on the current branch's PR |
-| [`/init`](commands/init.md) | command | Write a `CLAUDE.md` for a repo, optionally a devcontainer |
 | [`recall`](skills/recall/SKILL.md) | skill | Search past Claude Code sessions |
 | [`compound`](skills/compound/SKILL.md) | skill | Save a hard-won fix's root cause into project memory |
 | [`session-learnings`](skills/session-learnings/SKILL.md) | skill | Update `CLAUDE.md` with the session's lessons |
 | [`scan-diff`](skills/scan-diff/SKILL.md) | skill | Cheap Haiku bug scan of the current diff |
+| [`cr-check`](skills/cr-check/SKILL.md) | skill | Fetch or wait for a CodeRabbit review and return only the findings |
 | [`coderabbit-new`](skills/coderabbit-new/SKILL.md) | skill | Show only CodeRabbit comments added since a commit |
 | [`commit-and-verify`](skills/commit-and-verify/SKILL.md) | skill | Check hooks, diff and secrets, then commit |
 | [`visual-css-refinement`](skills/visual-css-refinement/SKILL.md) | skill | Screenshot-driven loop for CSS and UI changes |
@@ -51,7 +51,18 @@ skills/     Skills — invoke via the Skill tool
 
 ### [`/code-cleanup`](commands/code-cleanup.md)
 
-Deep codebase cleanup via eight parallel subagents that inherit this session's context. Recon happens in the current conversation; the eight forks see it as live history, so there's no need to inline a brief. Each fork owns one concern:
+Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch in one message. Each inherits the full conversation and reuses the same cached prompt prefix, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
+
+```
+your session: recon ─▶ map of the repo, now in context (cached prefix)
+                  ├─▶ fork 1  dedup          ┐
+                  ├─▶ fork 2  shared types   │  all eight inherit the map,
+                  ├─▶  ...                   │  run in parallel, and write
+                  └─▶ fork 8  AI slop        ┘  .tmp/code-cleanup/reports/
+your session: triage the eight reports ─▶ apply edits, one concern per commit
+```
+
+Each fork owns one concern:
 
 1. Deduplicate repeated logic (DRY where it cuts complexity)
 2. Consolidate shared type definitions
@@ -62,15 +73,11 @@ Deep codebase cleanup via eight parallel subagents that inherit this session's c
 7. Delete deprecated code, compat shims, and orphaned feature flags
 8. Remove AI slop — narration comments, stubs, commented-out code
 
-The command offers an **edit mode** (make high-confidence fixes in place) and a **dry-run mode** (evidence-backed reports only, reconcile with human triage). Dry-run is the safer default for fragile or first-time codebases. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
+The forks never edit. Eight writers on one working tree would walk over each other, and eight worktrees are impractical, so each fork writes a report of proposed changes with evidence and a confidence rating. Your session then triages all eight: it merges overlapping proposals, asks before anything that could break dynamic wiring or a public API, and applies the rest one concern at a time, with typecheck and tests (and a commit) after each. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
 
 ### [`/check-pr-reviews`](commands/check-pr-reviews.md)
 
 Fetch and address comments on the current branch's PR. Handles CodeRabbit, Claude-bot, and human reviewers differently. Verifies findings against current code before fixing.
-
-### [`/init`](commands/init.md)
-
-Bootstrap a project for Claude Code — analyze the repo, write `CLAUDE.md` with commands and conventions, and optionally scaffold `.devcontainer/devcontainer.json` with a language-detected base image.
 
 ## Skills
 
@@ -89,6 +96,10 @@ End-of-session skill that updates the project's `CLAUDE.md` with lessons learned
 ### [`scan-diff`](skills/scan-diff/SKILL.md)
 
 Quick bug-scan pass on the current git diff via a focused Haiku subagent. Targets logic errors, null access, auth bypasses, race conditions. Skips style and formatting. Not a replacement for full review — a cheap first filter.
+
+### [`cr-check`](skills/cr-check/SKILL.md)
+
+Fetch, wait for, or re-trigger a CodeRabbit review on a PR and get back only the findings, typically under 5 KB. `scripts/cr-check.sh` strips the analysis chains, prompt blocks, autofix and run-info sections, and prints the bot's verdict on HEAD next to GitHub's aggregate `reviewDecision`. It detects paused, rate-limited and fair-usage-capped reviews, and can wait those out and re-trigger. A capped CodeRabbit still posts a passing status check, so it warns when that check is all you have. Needs `gh` and `jq`.
 
 ### [`coderabbit-new`](skills/coderabbit-new/SKILL.md)
 
