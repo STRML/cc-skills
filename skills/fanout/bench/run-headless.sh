@@ -13,6 +13,11 @@ here=$(cd "$(dirname "$0")" && pwd)
 CLAUDE_BIN=${CLAUDE_BIN:-claude}
 BENCH_MODEL=${BENCH_MODEL:-claude-sonnet-5-5}
 target=$1 out=$2 arm=$3
+# A reused output directory would mix two runs' reports in one score.
+if [[ -e "$out" ]] && [[ -n "$(ls -A "$out")" ]]; then
+  echo "run-headless: $out is not empty; pick a new output directory" >&2
+  exit 1
+fi
 mkdir -p "$out"
 
 audit_prompt() {
@@ -26,19 +31,21 @@ EOF
 }
 
 run_agent() {
-  local id=$1 brief=$2
+  local id=$1 brief=$2 rc=0
   ( cd "$target" && CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 "$CLAUDE_BIN" -p \
       --model "$BENCH_MODEL" --effort medium \
       --settings '{"disableAllHooks":true}' --strict-mcp-config \
       --allowedTools "Read Grep Glob" --output-format json \
-      "$(audit_prompt "$brief")" < /dev/null > "$out/$id.json" 2> "$out/$id.err" ) || true
-  jq -r '.result // ""' "$out/$id.json" | grep -E '^\s*\{' > "$out/$id.jsonl" || true
-  # An agent that returned nothing must not pass as "found nothing" (seen once:
-  # concurrent launches on one profile all exited empty with no error).
-  if [[ ! -s "$out/$id.json" ]]; then
-    echo "run-headless: agent $id returned no output; see $out/$id.err" >&2
+      "$(audit_prompt "$brief")" < /dev/null > "$out/$id.json" 2> "$out/$id.err" ) || rc=$?
+  # A failed agent must not pass as "found nothing": a non-zero exit, output that is
+  # not the CLI's result JSON, or a result flagged is_error all mark the run failed.
+  # (Seen once: concurrent launches on one profile all exited empty with no error.)
+  if [[ $rc -ne 0 ]] || ! jq -e '(.is_error | not) and (.result | type == "string")' "$out/$id.json" > /dev/null 2>&1; then
+    echo "run-headless: agent $id failed (exit $rc); see $out/$id.err and $out/$id.json" >&2
     : > "$out/$id.FAILED"
+    return 0
   fi
+  jq -r '.result' "$out/$id.json" | grep -E '^\s*\{' > "$out/$id.jsonl" || true
 }
 
 case "$arm" in

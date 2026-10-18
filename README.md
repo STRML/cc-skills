@@ -52,7 +52,7 @@ skills/     Skills — invoke via the Skill tool
 
 ### [`/code-cleanup`](commands/code-cleanup.md)
 
-Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch in one message. Each inherits the full conversation and reuses the same cached prompt prefix, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
+Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch: one first, the other seven in the next message, so the first warms the prompt cache and the rest read the shared prefix from it. Each inherits the full conversation, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
 
 ```
 your session: recon ─▶ map of the repo, now in context (cached prefix)

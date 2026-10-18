@@ -22,6 +22,9 @@ import sys
 import tempfile
 
 BATCH = 60
+# Findings a judge call failed to return a verdict for. They are never stored (a
+# rerun retries them), and the script exits 2 if any remain.
+MISSED = []
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "gpt-6-luna")
 
 
@@ -126,7 +129,10 @@ def strict(corpus, findings, verdicts):
         ids = {f"f{j}": h for j, (h, _) in enumerate(chunk)}
         got = strict_batch(corpus, [(fid, text[h]) for fid, h in ids.items()])
         for fid, h in ids.items():
-            v = got.get(fid) or {}
+            v = got.get(fid)
+            if not v:
+                MISSED.append(h)  # the call failed or skipped it: leave it for a rerun
+                continue
             done[h] = v if isinstance(v, dict) else {"verdict": str(v), "scenario": ""}
         json.dump(done, open(spath, "w"), indent=1)
         print(f"strict {min(i + 20, len(todo))}/{len(todo)}", file=sys.stderr)
@@ -180,7 +186,10 @@ Reply with ONLY a JSON object mapping each finding id to "D<n>" or "no"."""
             os.unlink(last_path)
             got = first_json_object(raw)
             for fid, h in ids.items():
-                done[h] = got.get(fid, "no")
+                if fid not in got:
+                    MISSED.append(h)
+                    continue
+                done[h] = got[fid]
             json.dump(done, open(rpath, "w"), indent=1)
         print(f"rematched {fname}: {len(pairs)} findings", file=sys.stderr)
     return done
@@ -197,7 +206,10 @@ def judge(corpus, findings, key):
         ids = {f"f{j}": h for j, (h, _) in enumerate(chunk)}
         got = judge_batch(corpus, key, [(fid, todo[h]) for fid, h in ids.items()])
         for fid, h in ids.items():
-            verdicts[h] = got.get(fid, "unsure")
+            if fid not in got:
+                MISSED.append(h)
+                continue
+            verdicts[h] = got[fid]
         json.dump(verdicts, open(vpath, "w"), indent=1)
         print(f"judged {min(i + BATCH, len(items))}/{len(items)}", file=sys.stderr)
     return verdicts
@@ -239,6 +251,10 @@ def main():
         hits = rematch(corpus, findings, key)
         verdicts = {h: (hits[h] if hits.get(h, "no") != "no" else v) for h, v in verdicts.items()}
     score(corpus, findings, verdicts, key)
+    if MISSED:
+        print(f"judge.py: {len(set(MISSED))} finding(s) got no verdict (failed or skipped judge calls); "
+              "rerun to retry them", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

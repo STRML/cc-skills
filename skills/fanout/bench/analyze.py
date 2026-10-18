@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 import numpy as np
@@ -113,7 +114,8 @@ def run_cost(corpus, run, rates):
     wall = int(re.search(r"wall=(\d+)s", txt).group(1))
     transcript = re.search(r"transcript=(\S+)", txt).group(1)
     here = os.path.dirname(os.path.abspath(__file__))
-    out = os.popen(f"'{sys.executable}' -I '{here}/../scripts/usage.py' '{transcript}' --json").read()
+    out = subprocess.run([sys.executable, "-I", f"{here}/../scripts/usage.py", transcript, "--json"],
+                         capture_output=True, text=True, check=True).stdout
     cost = sum(np.dot([a.get(c, 0) for c in COLS], rates) for a in json.loads(out))
     return cost, wall
 
@@ -142,7 +144,8 @@ def main():
         cost, wall = run_cost(corpus, run, rates)
         per = cost / len(issues[run]) if issues[run] else float("nan")
         seed = len({r["verdict"] for r in mine if re.fullmatch(r"D\d+", r["verdict"])})
-        print(f"{run:<28} {len(mine):>5} {true_n:>5} {seed:>3}/12 {len(issues[run]):>8} {uniq:>6} {dup:>4.0f}% "
+        n_seeded = len(json.load(open(f"{corpus}/answer-key.json")))
+        print(f"{run:<28} {len(mine):>5} {true_n:>5} {seed:>3}/{n_seeded:<2} {len(issues[run]):>8} {uniq:>6} {dup:>4.0f}% "
               f"${cost:>6.2f} ${per:>7.3f} {wall:>5.0f}s")
         costs[run] = (cost, wall)
 
