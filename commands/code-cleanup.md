@@ -1,10 +1,10 @@
 ---
-description: Deep codebase cleanup via eight parallel subagents that inherit this session's context. Each owns one concern — dedup, type consolidation, dead code, circular deps, weak types, defensive-programming cruft, legacy paths, AI slop. Uses native Agent forks so spawns see the recon phase as live conversation, not a re-inlined brief.
+description: Deep codebase cleanup via eight parallel subagents that inherit this session's context. Each owns one concern — dedup, type consolidation, dead code, circular deps, weak types, defensive-programming cruft, legacy paths, AI slop. Uses native Agent forks so spawns see the recon phase as live conversation, not a re-inlined brief. Forks only report; this session triages the reports and makes every edit.
 ---
 
 # Code Cleanup
 
-Recon once in this session, then fan out to eight forked subagents that inherit the conversation. Reconcile their reports.
+Recon once in this session, then fan out to eight forked subagents that inherit the conversation. The forks are read-only: each writes a report of proposed changes. This session triages all eight reports and applies the edits itself, one concern at a time. Eight writers on one working tree walk over each other, and eight worktrees are impractical, so there is one writer.
 
 **Dependency:** none. Uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229), which inherits the full conversation and the prompt cache.
 
@@ -27,16 +27,9 @@ Work through:
 
 Summarize aloud in the conversation. This is now part of the context every fork will see.
 
-## Phase 2 — Ask mode, then fan out
+## Phase 2 — Fan out (forks report, never edit)
 
-Ask the user:
-
-- **Edit mode** — forks apply high-confidence fixes, run typecheck/tests after each batch, revert on failure. Risk: 8 spawns sharing one working tree can create conflicts; an aggressive delete can break dynamic wiring (WordPress hooks, Django signals, Rails autoload).
-- **Dry-run mode** — forks produce evidence-backed reports only. Safer for fragile codebases or first-time use.
-
-Default to dry-run if unclear.
-
-Then `mkdir -p .tmp/code-cleanup/reports` and dispatch all eight forks **in a single message** so they run concurrently.
+`mkdir -p .tmp/code-cleanup/reports`, then dispatch all eight forks **in a single message** so they run concurrently.
 
 Spawn template, repeated once per mandate (`NN` = 01…08):
 
@@ -44,51 +37,56 @@ Spawn template, repeated once per mandate (`NN` = 01…08):
 Agent:
   subagent_type: "fork"
   name: "cleanup-NN-<concern>"
-  description: "<concern> cleanup"
+  description: "<concern> cleanup report"
   prompt: |
-    MODE=<edit|dry-run>. <mandate text>
+    <mandate text>
 
     You inherited this session's recon phase — the tree, the build/typecheck/test commands,
     the confirmed tool availability, and the landmine list are all above. Do not re-derive them.
 
-    Your plain-text output is NOT visible to the orchestrator. Write your full report to
-    `.tmp/code-cleanup/reports/fork-NN.md` — that file is authoritative. Cover: assessment,
-    changes made (or proposed, in dry-run), items skipped with reasons, and follow-ups for the
-    main session. End the file with one line: WROTE_REPORT.
-```
+    You are read-only. Do not edit, create, move or delete any file except your report.
+    Seven other forks are reading the same tree, and the main session applies every change.
 
-Substitute `edit` or `dry-run` for `<edit|dry-run>` in every spawn before dispatching.
+    Your plain-text output is NOT visible to the orchestrator. Write your full report to
+    `.tmp/code-cleanup/reports/fork-NN.md` — that file is authoritative. One entry per finding:
+    - location: path:line (every site, not a sample)
+    - evidence: the grep output, AST match or tool output that proves it
+    - proposed change: concrete enough to apply without re-investigating (a diff when short)
+    - confidence: high | medium | low, and what could break (dynamic wiring, reflection,
+      public API, generated code)
+    - depends on / conflicts with: other concerns this change touches, if you can see them
+    Then items you looked at and rejected, with the reason. End the file with one line: WROTE_REPORT.
+```
 
 The eight mandates:
 
-1. **Deduplicate.** Find repeated logic across the codebase you've seen. Apply DRY only where it cuts real complexity — never abstraction for its own sake; leave three-line repetition alone.
-2. **Consolidate types.** Find type definitions duplicated across files or packages. Move shared shapes to one source of truth; update every import.
-3. **Dead code.** Run the tools we confirmed are installed. Remove unreferenced exports, files, and dependencies. Grep the full tree — tests, configs, dynamic imports included — before cutting.
-4. **Circular dependencies.** Run madge/pydeps/equivalent. Break every cycle by inverting a dependency or extracting the shared piece; do not mask with lazy imports.
-5. **Weak types.** Find every any/unknown/object/{}/Python Any/Go interface{}/Rust Box<dyn Any>. Read call sites and upstream types; replace with real types. Typecheck must end green.
-6. **Defensive programming.** Find every try/catch and equivalent. Keep only those handling real external input, documented failure modes, or caller-uncrossable boundaries. Delete empty catches, silent fallbacks, speculative guards.
-7. **Legacy paths.** Find deprecated code, compat shims, fallback branches, `// TODO: remove after X` that outlived X, feature flags long since defaulted. Delete. Every path should be the single canonical path.
-8. **AI slop.** Remove narration comments, "replaced old Y with new Z" notes, commented-out code, obvious-from-code comments, stub scaffolds. Keep comments that explain why, constraints, or non-obvious invariants — rewrite them for a new reader, with no references to prior versions.
+1. **Deduplicate.** Find repeated logic across the codebase you've seen. Propose DRY only where it cuts real complexity — never abstraction for its own sake; leave three-line repetition alone.
+2. **Consolidate types.** Find type definitions duplicated across files or packages. Propose one source of truth for each shared shape and list every import that must change.
+3. **Dead code.** Run the tools we confirmed are installed. Find unreferenced exports, files, and dependencies. Grep the full tree — tests, configs, dynamic imports included — before calling anything dead.
+4. **Circular dependencies.** Run madge/pydeps/equivalent. For each cycle, propose the break: invert a dependency or extract the shared piece. Never propose masking it with lazy imports.
+5. **Weak types.** Find every any/unknown/object/{}/Python Any/Go interface{}/Rust Box<dyn Any>. Read call sites and upstream types; propose the real type for each.
+6. **Defensive programming.** Find every try/catch and equivalent. Keep only those handling real external input, documented failure modes, or caller-uncrossable boundaries. Propose removing empty catches, silent fallbacks, speculative guards.
+7. **Legacy paths.** Find deprecated code, compat shims, fallback branches, `// TODO: remove after X` that outlived X, feature flags long since defaulted. Propose the single canonical path.
+8. **AI slop.** Find narration comments, "replaced old Y with new Z" notes, commented-out code, obvious-from-code comments, stub scaffolds. Keep comments that explain why, constraints, or non-obvious invariants; propose rewrites of those for a new reader, with no references to prior versions.
 
-Each fork starts with the full recon phase as inherited context and reuses the cached prompt prefix, so the marginal cost of the eighth fork is far below the first. Forks run in the background by default; wait for all eight before reconciling. The report file existing and non-empty is the delivery signal — a fork that dies silently never returns, so check the files rather than waiting indefinitely.
+Each fork starts with the full recon phase as inherited context and reuses the cached prompt prefix, so the marginal cost of the eighth fork is far below the first. Forks run in the background by default; wait for all eight before triaging. The report file existing and non-empty is the delivery signal — a fork that dies silently never returns, so check the files rather than waiting indefinitely.
 
-## Phase 3 — Reconcile
+## Phase 3 — Triage, then apply (this session is the only writer)
 
 1. Read every file in `.tmp/code-cleanup/reports/fork-NN.md`. Full text — do not grep-skim.
-2. Surface each fork's findings inline for the user.
-3. Resolve overlapping edits if edit mode ran; prefer the more conservative change.
-4. Run full typecheck and test suite once more.
-5. Commit per concern: `cleanup(dedup): …`, `cleanup(types): …`, etc.
-6. List medium- and low-confidence findings as a follow-up checklist.
+2. Build one change list. Merge findings that touch the same code (dead code and legacy paths overlap often, as do dedup and type consolidation), and where two proposals conflict, keep the more conservative one.
+3. Triage each item: **apply** (high confidence, evidence holds when you re-check it), **ask** (anything that could break dynamic wiring, reflection, or a public API — WordPress hooks, Django signals, Rails autoload), or **skip** (weak evidence). Show the user the ask items before touching them.
+4. Apply in an order that keeps later edits valid: legacy paths and dead code first (deletions shrink what the rest must touch), then circular dependencies, type consolidation, dedup, weak types, defensive code, and AI slop last.
+5. After each concern, run typecheck and tests. Green: commit it as `cleanup(<concern>): …`. Red: fix it or revert that concern's batch before moving on.
+6. List the skipped and medium/low-confidence findings as a follow-up checklist.
 7. Delete `.tmp/code-cleanup/`.
 
 ## Rules
 
-- **Scope is the mandate.** Fork 1 doesn't fix types. Fork 5 doesn't remove dead code.
-- **Evidence before edits.** Findings without grep output, AST matches, or tool output don't touch code.
-- **High confidence only** (edit mode). Medium and low go in the report.
-- **Prove every fix.** Typecheck and tests pass after each batch, or the batch reverts.
-- **Shared tree.** In edit mode, 8 spawns edit one working copy. Expect conflicts; reconcile is not optional.
+- **Forks never write code.** Their only output is the report. A fork that edits the tree breaks the other seven's view of it.
+- **Scope is the mandate.** Fork 1 doesn't report on types. Fork 5 doesn't hunt dead code.
+- **Evidence before edits.** Findings without grep output, AST matches, or tool output don't touch code, and this session re-checks the evidence before applying.
+- **Prove every fix.** Typecheck and tests pass after each concern's batch, or the batch reverts.
 
 ## Fallback: no fork available
 

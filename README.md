@@ -59,7 +59,7 @@ your session: recon ─▶ map of the repo, now in context (cached prefix)
                   ├─▶ fork 2  shared types   │  all eight inherit the map,
                   ├─▶  ...                   │  run in parallel, and write
                   └─▶ fork 8  AI slop        ┘  .tmp/code-cleanup/reports/
-your session: reconcile the eight reports
+your session: triage the eight reports ─▶ apply edits, one concern per commit
 ```
 
 Each fork owns one concern:
@@ -73,7 +73,7 @@ Each fork owns one concern:
 7. Delete deprecated code, compat shims, and orphaned feature flags
 8. Remove AI slop — narration comments, stubs, commented-out code
 
-The command offers an **edit mode** (make high-confidence fixes in place) and a **dry-run mode** (evidence-backed reports only, reconcile with human triage). Dry-run is the safer default for fragile or first-time codebases. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
+The forks never edit. Eight writers on one working tree would walk over each other, and eight worktrees are impractical, so each fork writes a report of proposed changes with evidence and a confidence rating. Your session then triages all eight: it merges overlapping proposals, asks before anything that could break dynamic wiring or a public API, and applies the rest one concern at a time, with typecheck and tests (and a commit) after each. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
 
 ### [`/check-pr-reviews`](commands/check-pr-reviews.md)
 
