@@ -25,6 +25,7 @@ Use this instead of hand-parsing `gh api .../pulls/<n>/comments`. `scripts/cr-ch
 - `2`: blocked by a status (`STATUS <kind>` printed): `PR_PAUSED`, `RATE_LIMIT`, `PLAN_LIMIT`, `FAIR_USAGE_LIMIT`, `ORG_DISABLED`, `MANUAL_TRIGGER_NOOP`, `UNKNOWN`. Don't auto-retry blindly.
 - `3`: `--wait` deadline passed with no review
 - `4`: precondition failed (no PR, not in a repo, missing `gh` or `jq`)
+- `5`: a GitHub API call failed. Output may be partial and the status is UNKNOWN; never read it as "no findings" or approved.
 
 ## Output shape
 
@@ -52,7 +53,7 @@ CodeRabbit posted a **"Review limit reached"** callout: a temporary cap under it
 <skill-dir>/scripts/cr-check.sh <num> --trigger --retry-on-fair-usage
 ```
 
-That sleeps the stated interval, re-triggers, and returns the real review. In practice the waits ran about 20 to 35 minutes and each ended in a complete review, one of which found four real bugs.
+That sleeps the stated interval, re-triggers, and returns the real review. Without an explicit `--wait-seconds`, `--retry-on-fair-usage` raises the deadline to 100 minutes so one capped sleep fits. In practice the waits ran about 20 to 35 minutes and each ended in a complete review, one of which found four real bugs.
 
 The re-trigger is mandatory, so this can't be a passive poll. A capped run is dropped, not queued: CodeRabbit "does not re-review already reviewed commits", so without an explicit `@coderabbitai review` after the timer it never revisits them. A plain `--wait` sits there forever.
 

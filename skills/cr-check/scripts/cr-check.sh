@@ -57,6 +57,7 @@ PR=""
 TRIGGER=0
 WAIT=0
 WAIT_SECONDS=360
+WAIT_SECONDS_SET=0
 SINCE_SHA=""
 INCLUDE_NITPICKS=1
 AUTO_RESUME=0
@@ -71,7 +72,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --trigger) TRIGGER=1; shift ;;
     --wait) WAIT=1; shift ;;
-    --wait-seconds) WAIT_SECONDS="$2"; shift 2 ;;
+    --wait-seconds) WAIT_SECONDS="$2"; WAIT_SECONDS_SET=1; shift 2 ;;
     --since) SINCE_SHA="$2"; shift 2 ;;
     --no-nitpicks) INCLUDE_NITPICKS=0; shift ;;
     --auto-resume) AUTO_RESUME=1; WAIT=1; shift ;;
@@ -90,6 +91,13 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# A fair-usage cap states a 20-35 minute reset, far past the 360 s default, and the
+# wait refuses to sleep past its deadline. Asking to wait the cap out without a
+# deadline means "long enough for one capped sleep and the review after it".
+if [ "$RETRY_FAIR_USAGE" -eq 1 ] && [ "$WAIT_SECONDS_SET" -eq 0 ]; then
+  WAIT_SECONDS=$((FAIR_USAGE_MAX_SLEEP + 600))
+fi
 
 command -v gh >/dev/null || { echo "cr-check: gh CLI not installed" >&2; exit 4; }
 command -v jq >/dev/null || { echo "cr-check: jq not installed" >&2; exit 4; }
@@ -121,8 +129,15 @@ PR_HEAD=$(gh pr view "$PR" --json headRefOid --jq .headRefOid 2>/dev/null || ech
 # which does not exist is worse than one that crashes.
 #
 # Everything numeric goes through cr_count now. It fails LOUD: a non-integer
-# result sets API_FAILED and the caller reports UNKNOWN rather than green.
-API_FAILED=0
+# result marks the API as failed, the caller reports UNKNOWN rather than green,
+# and the script exits 5. The flag lives in a file, not a variable: most helpers
+# run inside $( ... ), and a variable set in that subshell never reaches the
+# parent, so failures used to vanish. The helpers echo 0 and return 0 on failure
+# so an unguarded assignment does not kill the script under set -e first.
+API_FAIL_FILE=$(mktemp "${TMPDIR:-/tmp}/cr-check.XXXXXX")
+trap 'rm -f "$API_FAIL_FILE"' EXIT
+mark_api_failed() { echo 1 > "$API_FAIL_FILE"; }
+api_failed() { [ -s "$API_FAIL_FILE" ]; }
 
 # cr_count <jq-filter-over-.reviews> — CodeRabbit review count via the GraphQL
 # path (gh pr view), which is also the one that survives environments where the
@@ -132,7 +147,7 @@ cr_count() {
   local out
   out=$(gh pr view "$PR" --json reviews --jq "$1" 2>/dev/null)
   case "$out" in
-    ''|*[!0-9]*) API_FAILED=1; echo 0; return 1 ;;
+    ''|*[!0-9]*) mark_api_failed; echo 0; return 0 ;;
   esac
   echo "$out"
 }
@@ -148,7 +163,7 @@ cr_comment_count() {
   local out
   out=$(gh api "repos/$REPO/issues/$PR/comments?per_page=50" --jq "$1" 2>/dev/null)
   case "$out" in
-    ''|*[!0-9]*) API_FAILED=1; echo 0; return 1 ;;
+    ''|*[!0-9]*) mark_api_failed; echo 0; return 0 ;;
   esac
   echo "$out"
 }
@@ -161,13 +176,13 @@ cr_comment_count() {
 cr_comment_obj() {
   local out
   out=$(gh api "repos/$REPO/issues/$PR/comments?per_page=50" --jq "$1" 2>/dev/null) || {
-    API_FAILED=1; return 1
+    mark_api_failed; return 1
   }
   [ -n "$out" ] || return 1
   echo "$out" | jq -e 'type == "object" and (.body | type == "string")' >/dev/null 2>&1 || {
     # An error document reaching here means the query failed, not that the PR
     # has no status comment. Those are different answers and must not collapse.
-    case "$out" in *'"message"'*|*'"documentation_url"'*) API_FAILED=1 ;; esac
+    case "$out" in *'"message"'*|*'"documentation_url"'*) mark_api_failed ;; esac
     return 1
   }
   echo "$out"
@@ -496,7 +511,7 @@ warn_if_check_is_falsely_green() {
       return 0
       ;;
   esac
-  if [ "$API_FAILED" -eq 1 ]; then
+  if api_failed; then
     echo "WARNING: could not read reviews for ${PR_HEAD:0:7} (API error) — verdict UNKNOWN." >&2
     echo "WARNING: do NOT treat this as approved. Check manually:" >&2
     echo "  gh pr view $PR --json reviews" >&2
@@ -556,6 +571,7 @@ wait_for_review() {
   auto_triggered=0
   while [ "$(date +%s)" -lt "$deadline" ]; do
     count=$(cr_reviews_since "$SINCE")
+    if api_failed; then return 5; fi
     if [ "$count" -gt 0 ]; then return 0; fi
     # Repo has auto-review disabled — the review will never land unless asked
     # (true for the initial review AND every re-review after a push). Notice it
@@ -691,7 +707,7 @@ head_verdict() {
        | select(.commit.oid == \"$PR_HEAD\")
        | select(.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\" or .state == \"DISMISSED\")
        | {state, submitted_at: .submittedAt}]
-      | sort_by(.submitted_at) | last // empty" 2>/dev/null) || { API_FAILED=1; return 1; }
+      | sort_by(.submitted_at) | last // empty" 2>/dev/null) || { mark_api_failed; return 1; }
   printf '%s' "$out"
 }
 
@@ -712,7 +728,7 @@ print_head_verdict() {
       echo "HEAD verdict: $state on ${PR_HEAD:0:8} ($ts)"
       ;;
     *)
-      if [ "$API_FAILED" -eq 1 ]; then
+      if api_failed; then
         echo "HEAD verdict: UNKNOWN — could not read reviews for ${PR_HEAD:0:8} (API error)"
       else
         echo "HEAD verdict: NONE — no APPROVED/CHANGES_REQUESTED review on ${PR_HEAD:0:8}"
@@ -746,14 +762,14 @@ emit_findings() {
        | select(.author.login | test(\"coderabbit\"; \"i\"))
        | select(.submittedAt > \"$SINCE\")
        | {id: .fullDatabaseId, state, body, submitted_at: .submittedAt, commit_id: .commit.oid}]
-      | sort_by(.submitted_at) | last // empty" 2>/dev/null) || { API_FAILED=1; review=""; }
+      | sort_by(.submitted_at) | last // empty" 2>/dev/null) || { mark_api_failed; review=""; }
 
   # An object with a real state, or nothing. Never an error document.
   if [ -n "$review" ]; then
     echo "$review" | jq -e 'type == "object" and (.state | type == "string")' >/dev/null 2>&1 || review=""
   fi
 
-  if [ "$API_FAILED" -eq 1 ] && [ -z "$review" ]; then
+  if api_failed && [ -z "$review" ]; then
     echo "could not read reviews for PR #$PR (API error) — status UNKNOWN, not 'no review'"
     print_head_verdict
     return 1
@@ -795,7 +811,12 @@ emit_findings() {
   # `|| echo "[]"` APPENDS to it rather than replacing it — so the old code fed
   # jq a 404 body followed by "[]" and the length test died with "integer
   # expected", silently skipping every inline finding.
-  echo "$inline" | jq -e 'type == "array"' >/dev/null 2>&1 || inline="[]"
+  if ! echo "$inline" | jq -e 'type == "array"' >/dev/null 2>&1; then
+    # Not "no inline findings": the request failed, and saying nothing here hid them.
+    mark_api_failed
+    echo "WARNING: could not fetch inline comments (API error); inline findings are missing below."
+    inline="[]"
+  fi
   inline_n=$(echo "$inline" | jq 'length' 2>/dev/null || echo 0)
   case "$inline_n" in ''|*[!0-9]*) inline_n=0 ;; esac
 
@@ -869,9 +890,19 @@ if [ "$TRIGGER" -eq 1 ]; then
   trigger_review
 fi
 
+# Exit 5 whenever any GitHub call failed, even if output was printed: findings
+# may be missing, and "no findings" must never come from a failed request.
+finish() {
+  if api_failed; then
+    echo "cr-check: a GitHub API call failed; findings and status may be incomplete." >&2
+    exit 5
+  fi
+  exit 0
+}
+
 if [ "$WAIT" -eq 1 ]; then
   if wait_for_review; then
-    emit_findings
+    emit_findings || true
   else
     rc=$?
     if [ "$rc" -eq 2 ]; then
@@ -881,7 +912,7 @@ if [ "$WAIT" -eq 1 ]; then
       exit 3
     fi
   fi
-  exit 0
+  finish
 fi
 
 # No --wait: just emit whatever's there now.
@@ -891,5 +922,6 @@ if status=$(detect_status); then
   print_status "$status" "$kind"
   exit 2
 fi
-emit_findings
-warn_stale_head_if_not_waiting
+emit_findings || true
+warn_stale_head_if_not_waiting || true
+finish
