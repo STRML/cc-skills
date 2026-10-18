@@ -92,6 +92,10 @@ End-of-session audit for a repo with a GitHub tracker. It lists every open issue
 
 A live HTML dashboard for long agent runs: an epic, a PR landing queue, hours of autonomous work. `scripts/dash.py` is the only writer (locked, atomic, safe for a main session and subagents at once); `dash.py serve` puts the page on `127.0.0.1` and it refreshes every 10 seconds. It shows task progress with a dependency-driven Flow panel, open questions (each with the default the agent proceeds on, newest first, answered ones folded away), blockers, deliverables, two metric tiles and an activity log. Answers typed on the page come back to the agent on its next `dash.py` command. State lives in `<repo>/.dashboard/` and stays out of git. Standard library Python 3, no dependencies.
 
+### `migrate-to`
+
+`/migrate-to <host>` forks the running Claude Code session onto another machine over ssh and keeps going there. `cmux session move` refuses a session that is still running, so the script copies the transcript under a new id (cut just before the `/migrate-to` prompt) and moves the copy - your local session stays live. The fork gets the cwd repo's HEAD plus modified and untracked files, the other repos the session touched, and gitignored loose files like `.env`. It resumes as a window in one shared `migrate` tmux session on the host with Remote Control on, and a cmux pane opens beside yours without taking focus. `list` and `clean` show and tear down what's running there. Short host names map to ssh destinations in `~/.config/migrate-to/hosts`. Needs cmux and jq locally, tmux on the host, git and rsync on both, Claude Code signed in to the same account on both, and the same home path on both.
+
 ## Contributing
 
 PRs welcome. One skill or command per PR, please. Each addition should include a short rationale in the description — what problem it solves, what it doesn't try to do.
