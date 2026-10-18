@@ -29,7 +29,10 @@ mkdir -p "$out"
 bench=$(mktemp -d "$target/.fanout-bench.XXXXXX")
 bench_rel=$(basename "$bench")
 
-prompt=$(mktemp) launcher=$(mktemp) surface=""
+# The launcher path is the one string the pane's shell parses, so it must be plain:
+# created under /tmp (not $TMPDIR, which can hold anything) and checked.
+prompt=$(mktemp) launcher=$(mktemp /tmp/fanout-launch.XXXXXX) surface=""
+[[ "$launcher" =~ ^[A-Za-z0-9/._-]+$ ]] || { echo "run-forks: unsafe launcher path: $launcher" >&2; exit 1; }
 cleanup() {
   rm -f "$prompt" "$launcher"
   rm -rf "$bench"

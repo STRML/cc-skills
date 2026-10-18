@@ -46,6 +46,12 @@ run_agent() {
     return 0
   fi
   jq -r '.result' "$out/$id.json" | grep -E '^\s*\{' > "$out/$id.jsonl" || true
+  # Prose with no finding lines ("Audit unavailable") is a failed run, not a clean
+  # one. Only an empty result counts as zero findings.
+  if [[ ! -s "$out/$id.jsonl" ]] && jq -e '.result | test("\\S")' "$out/$id.json" > /dev/null 2>&1; then
+    echo "run-headless: agent $id answered in prose, not findings; see $out/$id.json" >&2
+    : > "$out/$id.FAILED"
+  fi
 }
 
 case "$arm" in
