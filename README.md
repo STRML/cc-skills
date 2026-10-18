@@ -29,9 +29,27 @@ commands/   Slash commands — invoke with /<name>
 skills/     Skills — invoke via the Skill tool
 ```
 
+## At a glance
+
+| Name | Type | What it does |
+|---|---|---|
+| [`/code-cleanup`](commands/code-cleanup.md) | command | Eight parallel forks clean up one concern each: duplication, dead code, weak types, AI slop |
+| [`/check-pr-reviews`](commands/check-pr-reviews.md) | command | Fetch and address review comments on the current branch's PR |
+| [`/init`](commands/init.md) | command | Write a `CLAUDE.md` for a repo, optionally a devcontainer |
+| [`recall`](skills/recall/SKILL.md) | skill | Search past Claude Code sessions |
+| [`compound`](skills/compound/SKILL.md) | skill | Save a hard-won fix's root cause into project memory |
+| [`session-learnings`](skills/session-learnings/SKILL.md) | skill | Update `CLAUDE.md` with the session's lessons |
+| [`scan-diff`](skills/scan-diff/SKILL.md) | skill | Cheap Haiku bug scan of the current diff |
+| [`coderabbit-new`](skills/coderabbit-new/SKILL.md) | skill | Show only CodeRabbit comments added since a commit |
+| [`commit-and-verify`](skills/commit-and-verify/SKILL.md) | skill | Check hooks, diff and secrets, then commit |
+| [`visual-css-refinement`](skills/visual-css-refinement/SKILL.md) | skill | Screenshot-driven loop for CSS and UI changes |
+| [`session-close-sweep`](skills/session-close-sweep/SKILL.md) | skill | End-of-session audit of issues, git state and docs |
+| [`progress-dashboard`](skills/progress-dashboard/SKILL.md) | skill | Live local HTML dashboard for long agent runs |
+| [`migrate-to`](skills/migrate-to/SKILL.md) | skill | Fork the running session onto another machine over ssh |
+
 ## Commands
 
-### `/code-cleanup`
+### [`/code-cleanup`](commands/code-cleanup.md)
 
 Deep codebase cleanup via eight parallel subagents that inherit this session's context. Recon happens in the current conversation; the eight forks see it as live history, so there's no need to inline a brief. Each fork owns one concern:
 
@@ -46,53 +64,53 @@ Deep codebase cleanup via eight parallel subagents that inherit this session's c
 
 The command offers an **edit mode** (make high-confidence fixes in place) and a **dry-run mode** (evidence-backed reports only, reconcile with human triage). Dry-run is the safer default for fragile or first-time codebases. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
 
-### `/check-pr-reviews`
+### [`/check-pr-reviews`](commands/check-pr-reviews.md)
 
 Fetch and address comments on the current branch's PR. Handles CodeRabbit, Claude-bot, and human reviewers differently. Verifies findings against current code before fixing.
 
-### `/init`
+### [`/init`](commands/init.md)
 
 Bootstrap a project for Claude Code — analyze the repo, write `CLAUDE.md` with commands and conventions, and optionally scaffold `.devcontainer/devcontainer.json` with a language-detected base image.
 
 ## Skills
 
-### `recall`
+### [`recall`](skills/recall/SKILL.md)
 
 Search past Claude Code session history via [search-sessions](https://github.com/sinzin91/search-sessions). Supports metadata queries (instant), full-content deep search, date filters, and project filters. Use when you need to find what was done in a previous session.
 
-### `compound`
+### [`compound`](skills/compound/SKILL.md)
 
 After a hard-won fix, capture the root cause and solution into project memory where future sessions auto-load it. Runs two parallel research subagents, then writes a structured `memory/solution_<slug>.md` and updates the `MEMORY.md` index.
 
-### `session-learnings`
+### [`session-learnings`](skills/session-learnings/SKILL.md)
 
 End-of-session skill that updates the project's `CLAUDE.md` with lessons learned — non-obvious commands, corrections, gotchas. Fires on `/clear`, `PreCompact`, or explicit invocation. Filters out generic advice and obvious conventions.
 
-### `scan-diff`
+### [`scan-diff`](skills/scan-diff/SKILL.md)
 
 Quick bug-scan pass on the current git diff via a focused Haiku subagent. Targets logic errors, null access, auth bypasses, race conditions. Skips style and formatting. Not a replacement for full review — a cheap first filter.
 
-### `coderabbit-new`
+### [`coderabbit-new`](skills/coderabbit-new/SKILL.md)
 
 Filter a PR's CodeRabbit comments to only those added since a given commit. Cuts through re-shown stale comments so you only triage what's actually new.
 
-### `commit-and-verify`
+### [`commit-and-verify`](skills/commit-and-verify/SKILL.md)
 
 Pre-commit verification workflow. Checks for pre-commit hooks first (skips redundant runs), reviews `git status` and `git diff`, catches debug code and secrets, stages selectively, and writes a structured Conventional-Commits-style message. Pushes only on explicit request.
 
-### `visual-css-refinement`
+### [`visual-css-refinement`](skills/visual-css-refinement/SKILL.md)
 
 Screenshot-driven loop for CSS/UI work. Forces a "before" screenshot baseline, then iterates: change → screenshot → compare → confirm. Prevents blind edits and the "I think it should look better now" failure mode. Includes responsive-breakpoint verification.
 
-### `session-close-sweep`
+### [`session-close-sweep`](skills/session-close-sweep/SKILL.md)
 
 End-of-session audit for a repo with a GitHub tracker. It lists every open issue, checks each against origin/main and production, closes the stale ones with an evidence comment, and batches the ones that need an owner decision into a single question. It also checks git state (dirty tree, unpushed commits, leftover worktrees and stashes), flags docs the session contradicted, and offers to keep the scripts and gotchas the session produced. Ends with a closed/remains report. Needs the `gh` CLI.
 
-### `progress-dashboard`
+### [`progress-dashboard`](skills/progress-dashboard/SKILL.md)
 
 A live HTML dashboard for long agent runs: an epic, a PR landing queue, hours of autonomous work. `scripts/dash.py` is the only writer (locked, atomic, safe for a main session and subagents at once); `dash.py serve` puts the page on `127.0.0.1` and it refreshes every 10 seconds. It shows task progress with a dependency-driven Flow panel, open questions (each with the default the agent proceeds on, newest first, answered ones folded away), blockers, deliverables, two metric tiles and an activity log. Answers typed on the page come back to the agent on its next `dash.py` command. State lives in `<repo>/.dashboard/` and stays out of git. Standard library Python 3, no dependencies.
 
-### `migrate-to`
+### [`migrate-to`](skills/migrate-to/SKILL.md)
 
 `/migrate-to <host>` forks the running Claude Code session onto another machine over ssh and keeps going there. `cmux session move` refuses a session that is still running, so the script copies the transcript under a new id (cut just before the `/migrate-to` prompt) and moves the copy - your local session stays live. The fork gets the cwd repo's HEAD plus modified and untracked files, the other repos the session touched, and gitignored loose files like `.env`. It resumes as a window in one shared `migrate` tmux session on the host with Remote Control on, and a cmux pane opens beside yours without taking focus. `list` and `clean` show and tear down what's running there. Short host names map to ssh destinations in `~/.config/migrate-to/hosts`. Needs cmux and jq locally, tmux on the host, git and rsync on both, Claude Code signed in to the same account on both, and the same home path on both.
 
