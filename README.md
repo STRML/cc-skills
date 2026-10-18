@@ -33,7 +33,7 @@ skills/     Skills — invoke via the Skill tool
 
 | Name | Type | What it does |
 |---|---|---|
-| [`/code-cleanup`](commands/code-cleanup.md) | command | Eight parallel forks clean up one concern each: duplication, dead code, weak types, AI slop |
+| [`/code-cleanup`](commands/code-cleanup.md) | command | Maps the repo once, then forks eight cache-sharing subagents, one per concern (dead code, weak types, AI slop, ...) |
 | [`/check-pr-reviews`](commands/check-pr-reviews.md) | command | Fetch and address review comments on the current branch's PR |
 | [`recall`](skills/recall/SKILL.md) | skill | Search past Claude Code sessions |
 | [`compound`](skills/compound/SKILL.md) | skill | Save a hard-won fix's root cause into project memory |
@@ -51,7 +51,18 @@ skills/     Skills — invoke via the Skill tool
 
 ### [`/code-cleanup`](commands/code-cleanup.md)
 
-Deep codebase cleanup via eight parallel subagents that inherit this session's context. Recon happens in the current conversation; the eight forks see it as live history, so there's no need to inline a brief. Each fork owns one concern:
+Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch in one message. Each inherits the full conversation and reuses the same cached prompt prefix, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
+
+```
+your session: recon ─▶ map of the repo, now in context (cached prefix)
+                  ├─▶ fork 1  dedup          ┐
+                  ├─▶ fork 2  shared types   │  all eight inherit the map,
+                  ├─▶  ...                   │  run in parallel, and write
+                  └─▶ fork 8  AI slop        ┘  .tmp/code-cleanup/reports/
+your session: reconcile the eight reports
+```
+
+Each fork owns one concern:
 
 1. Deduplicate repeated logic (DRY where it cuts complexity)
 2. Consolidate shared type definitions
