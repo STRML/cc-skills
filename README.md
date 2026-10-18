@@ -35,11 +35,11 @@ skills/     Skills — invoke via the Skill tool
 |---|---|---|
 | [`/code-cleanup`](commands/code-cleanup.md) | command | Eight parallel forks clean up one concern each: duplication, dead code, weak types, AI slop |
 | [`/check-pr-reviews`](commands/check-pr-reviews.md) | command | Fetch and address review comments on the current branch's PR |
-| [`/init`](commands/init.md) | command | Write a `CLAUDE.md` for a repo, optionally a devcontainer |
 | [`recall`](skills/recall/SKILL.md) | skill | Search past Claude Code sessions |
 | [`compound`](skills/compound/SKILL.md) | skill | Save a hard-won fix's root cause into project memory |
 | [`session-learnings`](skills/session-learnings/SKILL.md) | skill | Update `CLAUDE.md` with the session's lessons |
 | [`scan-diff`](skills/scan-diff/SKILL.md) | skill | Cheap Haiku bug scan of the current diff |
+| [`cr-check`](skills/cr-check/SKILL.md) | skill | Fetch or wait for a CodeRabbit review and return only the findings |
 | [`coderabbit-new`](skills/coderabbit-new/SKILL.md) | skill | Show only CodeRabbit comments added since a commit |
 | [`commit-and-verify`](skills/commit-and-verify/SKILL.md) | skill | Check hooks, diff and secrets, then commit |
 | [`visual-css-refinement`](skills/visual-css-refinement/SKILL.md) | skill | Screenshot-driven loop for CSS and UI changes |
@@ -68,10 +68,6 @@ The command offers an **edit mode** (make high-confidence fixes in place) and a 
 
 Fetch and address comments on the current branch's PR. Handles CodeRabbit, Claude-bot, and human reviewers differently. Verifies findings against current code before fixing.
 
-### [`/init`](commands/init.md)
-
-Bootstrap a project for Claude Code — analyze the repo, write `CLAUDE.md` with commands and conventions, and optionally scaffold `.devcontainer/devcontainer.json` with a language-detected base image.
-
 ## Skills
 
 ### [`recall`](skills/recall/SKILL.md)
@@ -89,6 +85,10 @@ End-of-session skill that updates the project's `CLAUDE.md` with lessons learned
 ### [`scan-diff`](skills/scan-diff/SKILL.md)
 
 Quick bug-scan pass on the current git diff via a focused Haiku subagent. Targets logic errors, null access, auth bypasses, race conditions. Skips style and formatting. Not a replacement for full review — a cheap first filter.
+
+### [`cr-check`](skills/cr-check/SKILL.md)
+
+Fetch, wait for, or re-trigger a CodeRabbit review on a PR and get back only the findings, typically under 5 KB. `scripts/cr-check.sh` strips the analysis chains, prompt blocks, autofix and run-info sections, and prints the bot's verdict on HEAD next to GitHub's aggregate `reviewDecision`. It detects paused, rate-limited and fair-usage-capped reviews, and can wait those out and re-trigger. A capped CodeRabbit still posts a passing status check, so it warns when that check is all you have. Needs `gh` and `jq`.
 
 ### [`coderabbit-new`](skills/coderabbit-new/SKILL.md)
 
