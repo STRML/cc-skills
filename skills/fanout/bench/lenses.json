@@ -1,0 +1,32 @@
+{
+  "_doc": "Review lenses, written generically (no terms from the corpus or its answer key) so they double as shippable presets. 'topic' splits by WHAT to look at; 'method' by HOW to look. A run with N lenses takes the first N of a set.",
+  "topic": [
+    {"id": "state", "brief": "State and lifecycle: multi-step interactions and their start/update/end phases, state left stale or half-updated, callbacks fired at the wrong moment, twice, or not at all."},
+    {"id": "math", "brief": "Numeric logic: positions, sizes, limits, clamping, scaling, unit conversions, rounding and off-by-one."},
+    {"id": "platform", "brief": "Platform APIs: how the code uses browser, OS or runtime APIs (measurement, observers, event objects, scrolling, timers) and whether it reads what it thinks it reads."},
+    {"id": "api", "brief": "Public API: options and props that are not passed through wrappers or alternate entry points, defaults, callback signatures and arguments."},
+    {"id": "rendering", "brief": "Rendering and reactivity: effect dependencies, render loops, memoization, refs, stale closures, values recreated on every render."},
+    {"id": "algorithms", "brief": "Core algorithms: the main data transformations of the library, their loops, early exits, special cases and collision or conflict handling."},
+    {"id": "external-input", "brief": "External input: data or events arriving from outside the component (messages, transfers from other apps, user files), duplicated or missing intermediate objects, partial lifecycles."},
+    {"id": "edges", "brief": "Edge cases: empty collections, missing items, zero or negative values, undefined options, early returns that skip required work."},
+    {"id": "config", "brief": "Configuration variants: behavior that changes with a mode or setting, and whether every variant is handled consistently."},
+    {"id": "types", "brief": "Types versus runtime: places where the declared types promise something the runtime does not do, unchecked casts, optional values used as required."},
+    {"id": "perf", "brief": "Performance bugs with visible effect: work repeated per event or per render, missing throttles, unbounded listeners."},
+    {"id": "teardown", "brief": "Teardown: listeners, observers, timers and scheduled callbacks not removed on unmount, close or option change."}
+  ],
+  "method": [
+    {"id": "dataflow", "brief": "Method: pick each public input and user action and trace its value through every function it reaches until it affects output. Report where a value is dropped, transformed wrongly, or read from the wrong source."},
+    {"id": "invariants", "brief": "Method: read the tests and docs to extract the invariants the code promises. Then try to break each invariant by reading the code paths, especially paths no test covers."},
+    {"id": "parity", "brief": "Method: find pairs of code that should behave the same (alternate entry points, symmetric operations, paired axes or dimensions, min and max) and diff their behavior line by line. Report every asymmetry that is not deliberate."},
+    {"id": "boundaries", "brief": "Method: for every numeric input and measured value, walk the boundary cases: 0, 1, max, negative, fractional, empty, first and last element."},
+    {"id": "callers", "brief": "Method: start from each exported function and hook, list its callers, and check that each caller passes what the function assumes (units, precision, argument shapes, ordering, lifecycle state)."},
+    {"id": "ordering", "brief": "Method: model each interaction as a sequence of events and state updates. Look for orderings the code assumes cannot happen but can."},
+    {"id": "smells", "brief": "Method: hunt for code that looks like a workaround or a half-applied fix: comments promising behavior the code lacks, a guard present in one branch and missing in its twin, values that disagree with their documentation."},
+    {"id": "spec", "brief": "Method: treat the README and API docs as the spec. For each documented option and behavior, confirm the code implements it. Report every documented behavior that is missing or wrong."},
+    {"id": "replay", "brief": "Method: pick concrete, realistic input values and replay the main computations by hand through the code. Report where the result disagrees with what a user would expect."},
+    {"id": "platform-truth", "brief": "Method: for each platform API call, check what it actually returns (which box, which units, relative to what, rounded or not) against how the code uses the result."},
+    {"id": "reactivity-model", "brief": "Method: for each component or reactive unit, reason about when it updates and which side effects run, with which dependencies. Look for loops, missed updates and stale reads."},
+    {"id": "adversary", "brief": "Method: act as a user trying to break the library with unusual but legal input and usage patterns, and follow what the code does with each."}
+  ],
+  "single": {"id": "all", "brief": "Review everything: state and lifecycle, numeric logic, platform API use, public API, rendering and reactivity, core algorithms, external input, edge cases."}
+}

@@ -46,6 +46,7 @@ skills/     Skills — invoke via the Skill tool
 | [`session-close-sweep`](skills/session-close-sweep/SKILL.md) | skill | End-of-session audit of issues, git state and docs |
 | [`progress-dashboard`](skills/progress-dashboard/SKILL.md) | skill | Live local HTML dashboard for long agent runs |
 | [`migrate-to`](skills/migrate-to/SKILL.md) | skill | Fork the running session onto another machine over ssh |
+| [`fanout`](skills/fanout/SKILL.md) | skill | Deep bug review: map the repo once, fork N method lenses with a staggered launch, triage in one place |
 
 ## Commands
 
@@ -124,6 +125,22 @@ A live HTML dashboard for long agent runs: an epic, a PR landing queue, hours of
 ### [`migrate-to`](skills/migrate-to/SKILL.md)
 
 `/migrate-to <host>` forks the running Claude Code session onto another machine over ssh and keeps going there. `cmux session move` refuses a session that is still running, so the script copies the transcript under a new id (cut just before the `/migrate-to` prompt) and moves the copy - your local session stays live. The fork gets the cwd repo's HEAD plus modified and untracked files, the other repos the session touched, and gitignored loose files like `.env`. It resumes as a window in one shared `migrate` tmux session on the host with Remote Control on, and a cmux pane opens beside yours without taking focus. `list` and `clean` show and tear down what's running there. Short host names map to ssh destinations in `~/.config/migrate-to/hosts`. Needs cmux and jq locally, tmux on the host, git and rsync on both, Claude Code signed in to the same account on both, and the same home path on both.
+
+### [`fanout`](skills/fanout/SKILL.md)
+
+A deep bug review that maps the repo once, then forks N subagents that each look at the code by a different method: trace data flow, break the documented invariants, diff code that should behave the same, walk the boundary cases. The forks inherit the map and only write reports; your session deduplicates, verifies and ranks the findings.
+
+Measured on react-grid-layout with Sonnet 5.5 against a corpus of reverted bug fixes ([`bench/README.md`](skills/fanout/bench/README.md)):
+
+| | Real issues per run | Cost per run |
+|---|---|---|
+| single agent | 11 | $0.79 |
+| 4 fresh agents, same lenses | 23 | $3.08 |
+| **4 forks, staggered launch** | **30** | **$1.82** |
+
+Two things carry most of that. Launch one fork first and the rest in the next message: launched together, every fork rebuilt the shared prefix (each wrote ~154K cache tokens), and staggering cut the forks' cache writes 6.4×. And split lenses by method rather than topic, which found more issues no other configuration did. Starting agents fresh did not buy more coverage; a second forked batch is the cheaper way to get it.
+
+Only the review preset ships. Cleanup, simplify, security and test-audit presets were not measured, so they are left out rather than built on faith. `/code-cleanup` keeps its own lenses but now uses the staggered launch. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
 
 ## Contributing
 
