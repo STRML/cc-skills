@@ -316,7 +316,7 @@ detect_status() {
   status_comment=$(cr_comment_obj "[.[] | select(.user.login | test(\"coderabbit\"; \"i\")) | select(.created_at > \"$SINCE\") | select(.body | test(\"$CR_STATUS_SUMMARY_RE\")) | {created_at, body}] | last // empty" || echo "")
   if [ -n "$status_comment" ] && [ "$status_comment" != "null" ]; then
     review_count=$(cr_reviews_since "$SINCE")
-    if [ "$review_count" -eq 0 ]; then
+    if [ "$review_count" -eq 0 ] && ! api_failed; then
       echo "$status_comment"
       return 0
     fi
@@ -344,7 +344,7 @@ detect_status() {
   fi
   if [ -n "$limit_comment" ] && [ "$limit_comment" != "null" ]; then
     review_count=$(cr_reviews_since "$SINCE")
-    if [ "$review_count" -eq 0 ]; then
+    if [ "$review_count" -eq 0 ] && ! api_failed; then
       echo "$limit_comment"
       return 0
     fi
@@ -372,7 +372,7 @@ detect_status() {
     age=$(( now_epoch - ack_epoch ))
     if [ "$ack_epoch" -gt 0 ] && [ "$age" -ge "$NOOP_GRACE_SECONDS" ]; then
       review_count=$(cr_reviews_since "$SINCE")
-      if [ "$review_count" -eq 0 ]; then
+      if [ "$review_count" -eq 0 ] && ! api_failed; then
         echo "$noop_ack"
         return 0
       fi
@@ -875,7 +875,7 @@ warn_stale_head_if_not_waiting() {
   [ -n "$PR_HEAD" ] || return 0
   local rc
   rc=$(gh api "repos/$REPO/pulls/$PR/reviews?per_page=50" \
-    --jq "[.[] | select(.user.login | test(\"coderabbit\"; \"i\"))] | sort_by(.submitted_at) | last | .commit_id // empty" 2>/dev/null)
+    --jq "[.[] | select(.user.login | test(\"coderabbit\"; \"i\"))] | sort_by(.submitted_at) | last | .commit_id // empty" 2>/dev/null) || { mark_api_failed; return 0; }
   if cr_check_pending; then
     echo "cr-check: ⚠ a CodeRabbit review is IN PROGRESS on HEAD ${PR_HEAD:0:8}; you are not waiting on it." >&2
     echo "cr-check:   nothing will notify you when it lands — re-run: cr-check $PR --wait  (with run_in_background)." >&2
@@ -906,6 +906,7 @@ if [ "$WAIT" -eq 1 ]; then
   else
     rc=$?
     if [ "$rc" -eq 2 ]; then
+      api_failed && finish
       exit 2
     elif [ "$rc" -eq 3 ]; then
       echo "cr-check: no CR review within ${WAIT_SECONDS}s — check status manually" >&2
@@ -920,6 +921,7 @@ if status=$(detect_status); then
   body=$(echo "$status" | jq -r .body)
   kind=$(classify_status_body "$body")
   print_status "$status" "$kind"
+  api_failed && finish
   exit 2
 fi
 emit_findings || true
