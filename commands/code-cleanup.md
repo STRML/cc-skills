@@ -29,7 +29,7 @@ Summarize aloud in the conversation. This is now part of the context every fork 
 
 ## Phase 2 — Fan out (forks report, never edit)
 
-`mkdir -p .tmp/code-cleanup/reports`, then dispatch all eight forks **in a single message** so they run concurrently.
+`mkdir -p .tmp/code-cleanup/reports`, then dispatch the forks in two steps: **fork 1 alone first, then forks 2–8 together in your next message.** Launching all eight in one message makes every fork miss the prompt cache, because none of the siblings' cache writes has committed yet: each fork rebuilds the whole recon prefix. Measured on a 4-fork run with ~200K tokens of recon: launched together, each fork's first request wrote ~154K cache tokens; staggered, forks 2–4 read ~209K from cache and wrote under 1K, cutting the forks' cache writes 6.4× and wall time from 124 s to 95 s.
 
 Spawn template, repeated once per mandate (`NN` = 01…08):
 
@@ -69,7 +69,7 @@ The eight mandates:
 7. **Legacy paths.** Find deprecated code, compat shims, fallback branches, `// TODO: remove after X` that outlived X, feature flags long since defaulted. Propose the single canonical path.
 8. **AI slop.** Find narration comments, "replaced old Y with new Z" notes, commented-out code, obvious-from-code comments, stub scaffolds. Keep comments that explain why, constraints, or non-obvious invariants; propose rewrites of those for a new reader, with no references to prior versions.
 
-Each fork starts with the full recon phase as inherited context and reuses the cached prompt prefix, so the marginal cost of the eighth fork is far below the first. Forks run in the background by default; wait for all eight before triaging. The report file existing and non-empty is the delivery signal — a fork that dies silently never returns, so check the files rather than waiting indefinitely.
+Each fork starts with the full recon phase as inherited context. With the staggered launch, forks 2–8 reuse the prefix fork 1 cached, so the marginal cost of the eighth fork is far below the first. Forks run in the background by default; wait for all eight before triaging. The report file existing and non-empty is the delivery signal — a fork that dies silently never returns, so check the files rather than waiting indefinitely.
 
 ## Phase 3 — Triage, then apply (this session is the only writer)
 
