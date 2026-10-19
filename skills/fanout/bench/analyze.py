@@ -101,6 +101,8 @@ def fit_rates(corpus):
         if "usage" in d and d.get("total_cost_usd"):
             X.append([d["usage"].get(c, 0) for c in COLS])
             y.append(d["total_cost_usd"])
+    if not y:
+        return None, 0, 0.0
     rates, *_ = np.linalg.lstsq(np.array(X, float), np.array(y, float), rcond=None)
     pred = np.array(X, float) @ rates
     err = float(np.max(np.abs(pred - y) / np.array(y)))
@@ -131,7 +133,12 @@ def main():
     cluster(rows)
     # Four rates need well over four headless agents to fit; a small corpus borrows
     # the fit from a larger one: analyze.py <corpus> --rates-from <other-corpus>.
-    rates_corpus = sys.argv[sys.argv.index("--rates-from") + 1].rstrip("/") if "--rates-from" in sys.argv else corpus
+    rates_corpus = corpus
+    if "--rates-from" in sys.argv:
+        i = sys.argv.index("--rates-from")
+        if i + 1 >= len(sys.argv):
+            sys.exit("usage: analyze.py <corpus-dir> [--rates-from <corpus-dir>]")
+        rates_corpus = sys.argv[i + 1].rstrip("/")
     rates, n, err = fit_rates(rates_corpus)
     if n < 8:
         sys.exit(f"analyze.py: only {n} headless agents to fit 4 rates on; pass --rates-from <larger corpus>")
