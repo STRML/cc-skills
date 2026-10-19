@@ -2,7 +2,7 @@
 
 Scope: autodream and omp-classifier (public, highest volume).
 
-1. **Make the skill reachable.** The routine clones its repos, so list `STRML/cc-skills` as one of the routine's repos (or copy `skills/pr-review/` into each watched repo's `.claude/skills/`; the skill reads repo rules from the base ref, so a PR cannot rewrite it either way). Merge this skill to `main` first.
+1. **Make the skill reachable.** The routine clones its repos, so list `STRML/cc-skills` as one of the routine's repos (or copy `skills/pr-review/` into each watched repo's `.claude/skills/`). The skill reads repo rules from the base ref, but that does not protect `SKILL.md` itself: **unconfirmed** is which ref the routine checks out. Before relying on this, confirm the skill loads from `main` of `STRML/cc-skills` and never from a PR branch. Merge this skill to `main` first.
 2. **Install the Claude GitHub App** (https://github.com/apps/claude) on the watched repos. It is what delivers the `pull_request` events to the routine.
 3. **Create one routine** at claude.ai/code/routines.
    - Repos: autodream, omp-classifier, plus `STRML/cc-skills` for the skill.

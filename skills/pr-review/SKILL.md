@@ -21,21 +21,21 @@ Use `gh api repos/<owner>/<repo>/...`:
 
 | Need | Call |
 |---|---|
-| head SHA, state, `draft`, `head.repo`/`base.repo`, `base.sha`, `changed_files`, `additions`, `deletions`, `mergeable_state` | `pulls/<n>` |
+| head SHA, `state`, `merged`, `draft`, `head.repo`/`base.repo`, `base.sha`, `changed_files`, `additions`, `deletions`, `mergeable` | `pulls/<n>` |
 | changed files and patches | `pulls/<n>/files?per_page=100` (page on) |
 | PR conversation | `issues/<n>/comments` |
 | review comments | `pulls/<n>/comments` |
 | CI | `commits/<head sha>/check-runs` and `commits/<head sha>/status` |
-| a file at the base | `contents/<path>?ref=<base.sha>` |
-| duplicates | `pulls?state=all&per_page=100` and `issues?state=all&per_page=100`, filter locally by file overlap and title keywords |
+| a file at the base | `contents/<path>?ref=<base.sha>` with header `Accept: application/vnd.github.raw+json` |
+| duplicates | `pulls?state=all&per_page=100` and `issues?state=all&per_page=100`; match on title keywords, then fetch `pulls/<n>/files` only for the few candidates that match or were opened in the last 30 days |
 
-`mergeable` is computed lazily and is often `null` on the first read: retry once after a short wait, and if it is still null write `merge status unknown`. If any other call fails, say which one under the merge/CI line and review with what you have; never invent a result.
+`mergeable` (`true`, `false` or `null`) alone decides the merge line: `true` is `Merges clean`, `false` is the conflict, and `null` after one retry is `merge status unknown`. Do not use `mergeable_state`; it also reports `blocked` and `behind` for reasons unrelated to conflicts. A 404 on an optional rubric file (`CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, the PR template) is normal, not a failure. If any other call fails, say which one under the merge/CI line and review with what you have; never invent a result.
 
 ### Guards (do these first, in order)
 
 1. **Stale head.** Read the PR's current head SHA. If it differs from the SHA you were given, output `SKIPPED: stale head (event <given>, current <current>)`.
-2. **State.** Closed, merged or draft: `SKIPPED: closed`, `SKIPPED: merged` or `SKIPPED: draft`.
-3. **Fork.** If `head.repo` is not `base.repo`: `SKIPPED: fork PR`. (Deliberate v1 choice: fork PRs come from outside authors and are the highest injection risk. Revisit once enforcement is verified.)
+2. **State.** If `merged` is true: `SKIPPED: merged`. Else if `state` is `closed`: `SKIPPED: closed`. Else if `draft` is true: `SKIPPED: draft`.
+3. **Fork.** If `head.repo` is not `base.repo` (a null `head.repo`, from a deleted fork, counts as a fork): `SKIPPED: fork PR`. (Deliberate v1 choice: fork PRs come from outside authors and are the highest injection risk. Revisit once enforcement is verified.)
 4. **Size.** Over ~1500 changed lines or ~40 files, excluding lockfiles and generated files: `SKIPPED: too large (<n> lines, <m> files)` plus a one-line split suggestion. Lockfiles still go to the supply-chain checks in lens 2.
 5. **Already reviewed (best effort).** If a PR comment already says `reviewed at head <this sha>`, output `SKIPPED: already reviewed at <sha>`. Reviews you produce are not posted, so this only catches reviews the user pasted in.
 
