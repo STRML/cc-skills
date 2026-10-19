@@ -63,9 +63,19 @@ def load_findings(corpus, full=False):
             except json.JSONDecodeError:
                 continue
             text = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
-            h = hashlib.sha1(text.encode()).hexdigest()[:12]
-            out.append((run, agent, f, h, json.dumps(f) if full else text))
+            out.append((run, agent, f, finding_hash(f), json.dumps(f) if full else text))
     return out
+
+
+def finding_hash(f):
+    """Review-shaped findings (with "why") keep the hash their cached verdicts were
+    stored under. Others (a cleanup proposal: evidence and change, no why) hash every
+    field, so two proposals at one file, line and title stay distinct."""
+    if "why" in f:
+        t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    else:
+        t = json.dumps(f, sort_keys=True)
+    return hashlib.sha1(t.encode()).hexdigest()[:12]
 
 
 def codex(corpus, prompt):
@@ -92,6 +102,13 @@ def preset_judge(corpus, findings, name, key):
     here = os.path.dirname(os.path.abspath(__file__))
     preset = json.load(open(os.path.join(here, "..", "presets", f"{name}.json")))
     vpath, spath = f"{corpus}/verdicts.json", f"{corpus}/verdicts-strict.json"
+    # Cached verdicts belong to one rubric. A corpus judged under another preset (or
+    # the bug-only judge) must not have its verdicts reused under this one.
+    mark = f"{corpus}/judge-rubric.txt"
+    used = open(mark).read().strip() if os.path.exists(mark) else ("bugs" if os.path.exists(vpath) else None)
+    if used not in (None, name):
+        sys.exit(f"judge.py: {corpus} was judged under '{used}'; move its verdicts*.json aside to judge as '{name}'")
+    open(mark, "w").write(name + "\n")
     verdicts = json.load(open(vpath)) if os.path.exists(vpath) else {}
     strict_v = json.load(open(spath)) if os.path.exists(spath) else {}
     known, known_rule = "", ""
@@ -326,6 +343,9 @@ def main():
             print(f"judge.py: {len(set(MISSED))} finding(s) got no verdict; rerun to retry them", file=sys.stderr)
             sys.exit(2)
         return
+    mark = f"{corpus}/judge-rubric.txt"
+    if os.path.exists(mark) and open(mark).read().strip() != "bugs":
+        sys.exit(f"judge.py: {corpus} was judged under preset '{open(mark).read().strip()}'; pass --preset")
     findings = load_findings(corpus)
     if "--score" in sys.argv:
         verdicts = json.load(open(f"{corpus}/verdicts.json"))

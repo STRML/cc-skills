@@ -27,7 +27,12 @@ COLS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"
 
 
 def fhash(f):
-    t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    """Same rule as judge.finding_hash: review-shaped findings keep the hash their
+    cached verdicts were stored under; findings with no "why" hash every field."""
+    if "why" in f:
+        t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    else:
+        t = json.dumps(f, sort_keys=True)
     return hashlib.sha1(t.encode()).hexdigest()[:12]
 
 

@@ -8,22 +8,32 @@
 # fresh:  N agents in parallel, one lens each, each starting from nothing (arm C).
 # <set> is a preset (review, cleanup, simplify, security) or a lenses.json set
 # (topic, method); see preset.py. A diff-scope preset audits CHANGES.diff at the
-# target's root. BENCH_TOOLS overrides the agents' tools (default: read-only).
+# target's root. BENCH_TOOLS overrides the agents' tools. Default: read-only for
+# method/topic (the measured review runs), plus Bash for presets, whose recon steps
+# run tools (cleanup's dead-code and cycle scanners) as a forked session can.
 # Each agent's raw JSON goes to <out-dir>/<lens>.json; findings to <out-dir>/<lens>.jsonl.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 CLAUDE_BIN=${CLAUDE_BIN:-claude}
 BENCH_MODEL=${BENCH_MODEL:-claude-sonnet-5-5}
-BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob}
 target=$1 out=$2 arm=$3
 case "$arm" in
   single) set=${4:-method} ;;
   fresh) n=$4 set=$5 ;;
   *) echo "run-headless: unknown arm $arm" >&2; exit 1 ;;
 esac
+measured_set=0
+[[ "$set" == method || "$set" == topic ]] && measured_set=1
+if [[ $measured_set -eq 1 ]]; then BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob}; else BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob Bash}; fi
 field() { python3 -I "$here/preset.py" "$set" "$@"; }
 task=$(field task) report_line=$(field report_line) max=$(field max_findings) scope=$(field scope)
+recon_extra=$(field recon_extra)
+# A diff-scope run without its diff would audit nothing and pass as "no findings".
+if [[ "$scope" == diff && ! -s "$target/CHANGES.diff" ]]; then
+  echo "run-headless: $set reviews a diff; $target/CHANGES.diff is missing or empty" >&2
+  exit 1
+fi
 # A reused output directory would mix two runs' reports in one score.
 if [[ -e "$out" ]] && [[ -n "$(ls -A "$out")" ]]; then
   echo "run-headless: $out is not empty; pick a new output directory" >&2
@@ -33,7 +43,7 @@ mkdir -p "$out"
 
 # The method and topic sets keep the exact wording of the measured review runs.
 audit_prompt() {
-  if [[ "$set" == method || "$set" == topic ]]; then
+  if [[ $measured_set -eq 1 ]]; then
     cat << EOF
 Audit the repository in the current directory for real bugs: behavior that is wrong for a user. Not style, not refactors.
 Your lens: $1
@@ -43,11 +53,13 @@ At most 15 findings, strongest first.
 EOF
     return
   fi
-  local diff_note=""
+  local diff_note="" prep=""
   [[ "$scope" == diff ]] && diff_note="The change set to review is CHANGES.diff in the current directory; the repository is at its post-change state."
+  [[ -n "$recon_extra" ]] && prep="Before you start: $(tr '\n' ' ' <<< "$recon_extra")"
   cat << EOF
 $task
 $diff_note
+$prep
 Your lens: $1
 Output ONLY JSON lines, one per finding, no prose and no code fence:
 $report_line

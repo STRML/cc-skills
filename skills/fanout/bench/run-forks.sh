@@ -30,6 +30,8 @@ if [[ "$set" == method || "$set" == topic ]]; then
   max=15 tail_note=" Report only bugs you can point to in the code."
 else
   if [[ $(field scope) == diff ]]; then
+    # Without its diff the run would audit nothing and still count as complete.
+    [[ -s "$target/CHANGES.diff" ]] || { echo "run-forks: $set reviews a diff; $target/CHANGES.diff is missing or empty" >&2; exit 1; }
     recon="Read README.md and the manifest, then read CHANGES.diff (the change set; the repository is at its post-change state), every file it touches in full, and the callers of each changed function."
   else
     recon="Read README.md and the manifest, then read EVERY non-test source file in $src_dir with the Read tool."
