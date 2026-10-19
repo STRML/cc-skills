@@ -23,11 +23,11 @@ The first argument picks a preset from `presets/`; the default is `review`. Read
 | Preset | Scope | Default N | Triage | Measured against one agent (Sonnet, `bench/README.md`) |
 |---|---|---|---|---|
 | `review` | repo or subsystem | 4 of 12 | verify and rank | 2.7× the real issues, same cost per issue (~70K tokens) |
-| `cleanup` | repo | 8 of 8 | apply, commit per concern | 30× the valid proposals, a third the cost per proposal (~70K tokens) |
+| `cleanup` | repo | 8 of 8 | apply, commit per concern | 45 vs 1.5 valid proposals per run, a third the cost per proposal (~70K tokens) |
 | `simplify` | a diff | 5 of 5 | apply | 1.9× the issues, 1.8× the cost per issue (1,206-line diff) |
-| `security` | repo or subsystem | 4 of 6 | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue (~17K tokens) |
+| `security` | repo or subsystem | 4 of 6 | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue (~17K tokens, ~70KB) |
 
-**Size check.** Forks pay for themselves by sharing a large recon. When the code in scope is under roughly 30K tokens (a small app, a diff of a few hundred lines), one agent with every lens finds less but costs a third as much per issue. Run it that way, and fork only when the user wants maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora.
+**Size check, before Phase 1.** Forks pay for themselves by sharing a large recon. Estimate the code in scope at about 4 bytes per token (`wc -c` on the source, or on the diff plus the files it touches). Under roughly 30K tokens (~120KB), skip the recon and the forks: spawn one general-purpose agent with the preset's task, report line, `recon_extra` and every lens brief inlined, as the measured single-agent arm did, then triage its report as in Phase 3. It finds less, but each issue costs a third to a half as much. Fork anyway when the user asks for maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora. The check applies to every preset, `/code-cleanup` included: cleanup was measured only at 70K.
 
 | Field | Used in |
 |---|---|

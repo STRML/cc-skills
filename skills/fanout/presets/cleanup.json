@@ -1,5 +1,5 @@
 {
-  "_doc": "Cleanup preset, the engine behind /code-cleanup. Each lens is one cleanup concern, so a run uses all of them. Measured on react-grid-layout: 8 forks found 30x the valid proposals of one agent at a third of the cost per proposal (bench/README.md).",
+  "_doc": "Cleanup preset, the engine behind /code-cleanup. Each lens is one cleanup concern, so a run uses all of them. Measured on react-grid-layout: 8 forks found 45 valid proposals per run against 1.5 for one agent, at a third of the cost per proposal (bench/README.md).",
   "status": "measured",
   "scope": "repo",
   "default_n": 8,

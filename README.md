@@ -133,7 +133,7 @@ Maps the code once, then forks N subagents that inherit the map and each look at
 | Preset | What it does | Triage | Forks against one agent (Sonnet) |
 |---|---|---|---|
 | [`review`](skills/fanout/presets/review.json) | bug hunt by method: trace data flow, break invariants, diff code that should match, walk boundaries | verify and rank | 2.7× the real issues, same cost per issue |
-| [`cleanup`](skills/fanout/presets/cleanup.json) | the eight `/code-cleanup` concerns | apply, commit per concern | 30× the valid proposals, a third the cost per proposal |
+| [`cleanup`](skills/fanout/presets/cleanup.json) | the eight `/code-cleanup` concerns | apply, commit per concern | 45 vs 1.5 valid proposals per run, a third the cost per proposal |
 | [`simplify`](skills/fanout/presets/simplify.json) | a diff or PR: reuse, needless abstraction, flattening, repeated work, code the change left dead | apply | 1.9× the issues, 1.8× the cost per issue |
 | [`security`](skills/fanout/presets/security.json) | taint to sinks, authorization, guard parity, secrets and config, crypto and sessions, attacker walk | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue |
 
@@ -149,7 +149,7 @@ The engine and the `review` preset were measured on react-grid-layout with Sonne
 
 Two things carry most of that. Launch one fork first and the rest in the next message: launched together, every fork rebuilt the shared prefix (each wrote ~154K cache tokens), and staggering cut the forks' cache writes 6.4×. And split lenses by method rather than topic, which found more issues no other configuration did. Starting agents fresh did not buy more coverage; a second forked batch is the cheaper way to get it.
 
-Every preset was measured against one agent ([`bench/README.md`](skills/fanout/bench/README.md#other-presets)). Forks win when the shared recon is big: review and cleanup ran on ~70K tokens of source. On small code (DVNA's ~17K tokens, a 1,206-line diff) they still find more, at 2-3× the cost per issue, so the skill runs one agent below roughly 30K tokens unless you want maximum coverage. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
+Every preset was measured against one agent ([`bench/README.md`](skills/fanout/bench/README.md#other-presets)). Forks win when the shared recon is big: review and cleanup ran on ~70K tokens of source. On small code (DVNA's ~17K tokens, a 1,206-line diff) they still find more, at 1.8-3× the cost per issue, so the skill runs one agent below roughly 30K tokens unless you want maximum coverage. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
 
 ## Contributing
 

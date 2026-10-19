@@ -27,12 +27,12 @@ Each preset ran as a single agent and as forks with a staggered launch: 2 runs o
 |---|---|---|---|---|---|
 | cleanup | react-grid-layout, ~70K tokens | single agent | 1.5 | $0.28 | $0.185 |
 | | | **8 forks** | **45** | **$2.74** | **$0.061** |
-| security | DVNA, ~17K tokens | single agent | 11.5 (11-12 of 19 documented) | $0.19 | $0.016 |
+| security | DVNA, ~70KB (~17K tokens) | single agent | 11.5 (11-12 of 19 documented) | $0.19 | $0.016 |
 | | | 4 forks | 18.5 (15 of 19 documented) | $0.89 | $0.048 |
 | simplify | a 1,206-line react-grid-layout diff | single agent | 7.5 | $0.23 | $0.031 |
 | | | 5 forks | 14.5 | $0.83 | $0.057 |
 
-Forking pays when the shared recon is big. On react-grid-layout's ~70K tokens, the cleanup forks found 30× as many valid proposals as one agent at a third of the cost per proposal, the same shape as review. On DVNA and the diff there was little prefix to share, so each fork's own output dominated the cost: the forks still found more (security recall 15/19 against 11-12/19), but each issue cost about 2-3× as much. Two single-agent runs found 13 distinct issues on each of those corpora, for under half the cost of one fork run. The break-even size lies somewhere between the two measured sizes, 17K and 70K tokens; the skill draws the line at 30K, which is a guess inside that range, not a measurement. Below it, run one agent, or fork only when coverage matters more than cost.
+Forking pays when the shared recon is big. On react-grid-layout's ~70K tokens, the cleanup forks found 45 valid proposals per run against 1.5 for one agent, at a third of the cost per proposal: the same shape as review. The single agent, given all eight concerns at once, wrote 9-16 proposals and most failed the bar. On DVNA and the diff there was little prefix to share, so each fork's own output dominated the cost: the forks still found more (security recall 15/19 against 11-12/19), but each issue cost 1.8-3× as much. Two single-agent runs found 13 distinct issues on each of those corpora, for about half the cost of one fork run or less. The break-even size lies somewhere between the two measured sizes, 17K and 70K tokens; the skill draws the line at 30K, which is a guess inside that range, not a measurement. Below it, run one agent, or fork only when coverage matters more than cost.
 
 Precision against the preset bar was 31-32% for cleanup forks (6-22% single), 72-83% for security forks (80-93% single) and 41-45% for simplify forks (53-57% single). Forks trade some precision for coverage, which is why the host verifies every item before reporting or applying it.
 
@@ -62,7 +62,9 @@ one, then the rest  fork first request: read 209K  write <1K    (forks 2..4)
 - The cleanup single agent had Bash, like the forks, so it could run the dead-code and cycle scanners. The other headless arms were read-only.
 - A diff-scope run cannot prove an agent read the diff; the runners only check that `CHANGES.diff` exists and is non-empty.
 - 1-3 runs per configuration. Treat differences under ~5 issues per run as noise.
-- "Real" is a judge verdict with a concrete-scenario requirement, spot-checked by hand on a sample, not verified line by line.
+- "Real" is a judge verdict with a concrete-scenario requirement, not verified line by line. Review verdicts were spot-checked by hand on a sample. For cleanup, a hand check of all 25 single-agent verdicts and 6 accepted fork verdicts agreed with the judge on all but 2 (both rejected deletions of one unreferenced module), which would move the single agent from 1.5 to about 2.5 per run.
+- Only DVNA fork run r1 had the "you are one of the forks" line; every other fork run predates it.
+- Sizes in tokens are bytes divided by 4.
 - Distinct issues are clustered by file and line distance (same file, within 10 lines), which can merge two nearby bugs or split one.
 - Seeded recall did not separate configurations: every run found 2-5 of the 12 seeded bugs, and 5 seeded bugs were never found by any run. Several reverted fixes are hard to see as bugs without the original issue thread.
 - Costs come from per-token rates fitted on 21 runs whose CLI reported both usage and cost (input $2, cache write $4, cache read $0.10, output $10 per million; the fit reproduced every reported cost). The break-even N assumes a model's rates scale together, so it should hold for other models; ds4 and other providers' caching was not measured.
