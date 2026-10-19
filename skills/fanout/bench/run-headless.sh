@@ -8,9 +8,9 @@
 # fresh:  N agents in parallel, one lens each, each starting from nothing (arm C).
 # <set> is a preset (review, cleanup, simplify, security) or a lenses.json set
 # (topic, method); see preset.py. A diff-scope preset audits CHANGES.diff at the
-# target's root. BENCH_TOOLS overrides the agents' tools. Default: read-only for
-# method/topic (the measured review runs), plus Bash for presets, whose recon steps
-# run tools (cleanup's dead-code and cycle scanners) as a forked session can.
+# target's root. BENCH_TOOLS overrides the agents' tools. Default: read-only, except
+# cleanup, whose recon runs the dead-code and cycle scanners and so also gets Bash.
+# Run cleanup only against a disposable corpus target.
 # Each agent's raw JSON goes to <out-dir>/<lens>.json; findings to <out-dir>/<lens>.jsonl.
 set -euo pipefail
 
@@ -25,7 +25,7 @@ case "$arm" in
 esac
 measured_set=0
 [[ "$set" == method || "$set" == topic ]] && measured_set=1
-if [[ $measured_set -eq 1 ]]; then BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob}; else BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob Bash}; fi
+if [[ "$set" == cleanup ]]; then BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob Bash}; else BENCH_TOOLS=${BENCH_TOOLS:-Read Grep Glob}; fi
 field() { python3 -I "$here/preset.py" "$set" "$@"; }
 task=$(field task) report_line=$(field report_line) max=$(field max_findings) scope=$(field scope)
 recon_extra=$(field recon_extra)

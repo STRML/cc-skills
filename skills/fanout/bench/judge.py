@@ -105,7 +105,11 @@ def preset_judge(corpus, findings, name, key):
     # Cached verdicts belong to one rubric. A corpus judged under another preset (or
     # the bug-only judge) must not have its verdicts reused under this one.
     mark = f"{corpus}/judge-rubric.txt"
-    used = open(mark).read().strip() if os.path.exists(mark) else ("bugs" if os.path.exists(vpath) else None)
+    # The lock lives only as long as the verdicts it guards: with verdicts.json moved
+    # aside, a stale judge-rubric.txt no longer blocks a fresh judgment.
+    used = None
+    if os.path.exists(vpath):
+        used = open(mark).read().strip() if os.path.exists(mark) else "bugs"
     if used not in (None, name):
         sys.exit(f"judge.py: {corpus} was judged under '{used}'; move its verdicts*.json aside to judge as '{name}'")
     open(mark, "w").write(name + "\n")
