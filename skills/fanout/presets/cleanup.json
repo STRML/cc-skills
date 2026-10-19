@@ -1,6 +1,6 @@
 {
-  "_doc": "Cleanup preset, the engine behind /code-cleanup. Each lens is one cleanup concern, so a run uses all of them. Not benchmarked: the lenses are the /code-cleanup mandates as they shipped before /fanout.",
-  "status": "unbenchmarked",
+  "_doc": "Cleanup preset, the engine behind /code-cleanup. Each lens is one cleanup concern, so a run uses all of them. Measured on react-grid-layout: 8 forks found 30x the valid proposals of one agent at a third of the cost per proposal (bench/README.md).",
+  "status": "measured",
   "scope": "repo",
   "default_n": 8,
   "task": "Find cleanup work in this codebase within your concern only, and propose each change with the evidence that makes it safe. Do not report bugs or style outside your concern.",

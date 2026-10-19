@@ -20,12 +20,14 @@ Measured on one repo with Sonnet (`bench/README.md`): 4 staggered forks found 2.
 
 The first argument picks a preset from `presets/`; the default is `review`. Read the preset file before Phase 1: every field below comes from it.
 
-| Preset | Scope | Default N | Triage | Status |
+| Preset | Scope | Default N | Triage | Measured against one agent (Sonnet, `bench/README.md`) |
 |---|---|---|---|---|
-| `review` | repo or subsystem | 4 of 12 | verify and rank | measured |
-| `cleanup` | repo | 8 of 8 | apply, commit per concern | unbenchmarked |
-| `simplify` | a diff | 5 of 5 | apply | unbenchmarked |
-| `security` | repo or subsystem | 4 of 6 | verify and rank | unbenchmarked |
+| `review` | repo or subsystem | 4 of 12 | verify and rank | 2.7× the real issues, same cost per issue (~70K tokens) |
+| `cleanup` | repo | 8 of 8 | apply, commit per concern | 30× the valid proposals, a third the cost per proposal (~70K tokens) |
+| `simplify` | a diff | 5 of 5 | apply | 1.9× the issues, 1.8× the cost per issue (1,206-line diff) |
+| `security` | repo or subsystem | 4 of 6 | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue (~17K tokens) |
+
+**Size check.** Forks pay for themselves by sharing a large recon. When the code in scope is under roughly 30K tokens (a small app, a diff of a few hundred lines), one agent with every lens finds less but costs a third as much per issue. Run it that way, and fork only when the user wants maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora.
 
 | Field | Used in |
 |---|---|
@@ -61,6 +63,7 @@ Launching all N in one message makes every fork miss the cache: none of the sibl
 Fork prompt, with the preset's fields and the lens filled in:
 
 ```
+You are one of the forks, not the session that launched them: do not launch agents.
 <TASK>
 You already have the source in context from the recon; read more only if you need to.
 Your method: <LENS BRIEF>
@@ -70,7 +73,7 @@ Write ONLY JSON lines to .tmp/fanout/<run>/<LENS ID>.jsonl with the Write tool, 
 At most <MAX FINDINGS> findings, strongest first. Your text output is not visible; only the file counts.
 ```
 
-The report file existing and non-empty is the delivery signal. A fork that dies silently never reports back, so check the files instead of waiting indefinitely.
+A fork inherits the message that launched it, so without the first line it can act as the launcher: in one benchmark run, three of four security forks each launched another fork and ended without reporting. The report file existing and non-empty is the delivery signal. A fork that dies silently never reports back, so check the files instead of waiting indefinitely.
 
 ## Phase 3: triage (this session is the only writer)
 

@@ -27,7 +27,7 @@ if [[ "$set" == method || "$set" == topic ]]; then
   recon="Read README.md and package.json, then read EVERY non-test .ts and .tsx file under src/ with the Read tool."
   task="Audit this repository for real bugs: behavior that is wrong for a user. Not style, not refactors."
   report_line='{"file": "src/...", "line": <number>, "title": "<short>", "why": "<what goes wrong, and when>"}'
-  max=15 tail_note=" Report only bugs you can point to in the code."
+  max=15 tail_note=" Report only bugs you can point to in the code." head_note=""
 else
   if [[ $(field scope) == diff ]]; then
     # Without its diff the run would audit nothing and still count as complete.
@@ -39,6 +39,9 @@ else
   extra=$(field recon_extra)
   [[ -n "$extra" ]] && recon="$recon Then: $(tr '\n' ' ' <<< "$extra")"
   task=$(field task) report_line=$(field report_line) max=$(field max_findings) tail_note=""
+  # A fork inherits the launch message and can act as the launcher (seen once: three
+  # of four forks each launched another fork and never reported).
+  head_note="You are one of the forks, not the session that launched them: do not launch agents. "
 fi
 
 # A reused output directory would mix two runs' reports in one score.
@@ -76,7 +79,7 @@ else
   echo "Phase 2, fan out. In ONE message, launch exactly $n Agent calls with subagent_type \"fork\", one per lens below. Give each fork this prompt, with its lens and id filled in:"
 fi)
 
-"$task You already have the source in context from the recon; read more only if you need to. Your lens: <LENS>.$tail_note Write ONLY JSON lines, one per finding, no prose, to $bench_rel/<ID>.jsonl with the Write tool: $report_line. At most $max findings, strongest first. Your text output is not visible to anyone; only the file counts. Then stop."
+"$head_note$task You already have the source in context from the recon; read more only if you need to. Your lens: <LENS>.$tail_note Write ONLY JSON lines, one per finding, no prose, to $bench_rel/<ID>.jsonl with the Write tool: $report_line. At most $max findings, strongest first. Your text output is not visible to anyone; only the file counts. Then stop."
 
 Lenses:
 EOF

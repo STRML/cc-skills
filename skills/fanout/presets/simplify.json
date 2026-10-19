@@ -1,6 +1,6 @@
 {
-  "_doc": "Simplify preset: a change set (a branch, a PR, uncommitted work), not the whole repo. Recon reads the diff and everything it touches. Not benchmarked. On a small diff a single pass is cheaper: the shared recon is what forks save, and a small diff has little of it.",
-  "status": "unbenchmarked",
+  "_doc": "Simplify preset: a change set (a branch, a PR, uncommitted work), not the whole repo. Recon reads the diff and everything it touches. Measured on a 1,206-line diff: 5 forks found 1.9x the issues of one agent at 1.8x the cost per issue (bench/README.md). On a small diff a single pass is cheaper: the shared recon is what forks save, and a small diff has little of it.",
+  "status": "measured",
   "scope": "diff",
   "default_n": 5,
   "task": "Review this change set for ways to make it simpler, with the same behavior. Not bugs, not style nits: code that could be shorter, flatter, reuse what exists, or be deleted.",

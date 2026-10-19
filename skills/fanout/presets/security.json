@@ -1,6 +1,6 @@
 {
-  "_doc": "Security preset: method lenses for an audit of the code itself (not dependency CVEs, which need a scanner). Not benchmarked.",
-  "status": "unbenchmarked",
+  "_doc": "Security preset: method lenses for an audit of the code itself (not dependency CVEs, which need a scanner). Measured on DVNA (~17K tokens): 4 forks found 15 of 19 documented vulnerabilities against 11-12 for one agent, at 3x the cost per issue (bench/README.md).",
+  "status": "measured",
   "scope": "repo",
   "default_n": 4,
   "task": "Audit this code for security vulnerabilities an attacker can reach. Not hardening advice, not style.",

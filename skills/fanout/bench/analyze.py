@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-arm comprehensiveness and cost, from judged findings.
 
-    analyze.py <corpus-dir>
+    analyze.py <corpus-dir> [--rates-from <corpus-dir>]
 
 Distinct issues: findings judged real (strict pass) or matching a seeded defect are
 clustered across ALL runs; two findings are one issue when they cite the same file
@@ -129,7 +129,12 @@ def main():
     corpus = sys.argv[1].rstrip("/")
     rows = load(corpus)
     cluster(rows)
-    rates, n, err = fit_rates(corpus)
+    # Four rates need well over four headless agents to fit; a small corpus borrows
+    # the fit from a larger one: analyze.py <corpus> --rates-from <other-corpus>.
+    rates_corpus = sys.argv[sys.argv.index("--rates-from") + 1].rstrip("/") if "--rates-from" in sys.argv else corpus
+    rates, n, err = fit_rates(rates_corpus)
+    if n < 8:
+        sys.exit(f"analyze.py: only {n} headless agents to fit 4 rates on; pass --rates-from <larger corpus>")
     print(f"fitted $/Mtok on {n} headless agents (max error {100 * err:.1f}%): "
           + ", ".join(f"{c.split('_')[0] if c != 'cache_creation_input_tokens' else 'cache_write'}"
                       f"{'' if c != 'cache_read_input_tokens' else '_read'}={r * 1e6:.2f}"
