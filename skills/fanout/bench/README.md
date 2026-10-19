@@ -80,6 +80,8 @@ bench/run-headless.sh <out>/target <out>/runs/C-r1 fresh 4 method
 STAGGER=1 bench/run-forks.sh <out>/target <out>/runs/D-r1 4 method   # needs cmux
 # 3. Judge (Codex, blind to configuration), then score.
 bench/judge.py <out> --strict --rematch
+# Fitting 4 token rates takes 8+ headless agents. The runs above give 5: add a
+# second fresh run (C-r2), or borrow a fit with --rates-from <another corpus>.
 bench/analyze.py <out>
 # A preset other than review: give the set name, judge against the preset's bar.
 bench/run-headless.sh <out>/target <out>/runs/A-single-r1 single cleanup
