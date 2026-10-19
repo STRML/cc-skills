@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-arm comprehensiveness and cost, from judged findings.
 
-    analyze.py <corpus-dir>
+    analyze.py <corpus-dir> [--rates-from <corpus-dir>]
 
 Distinct issues: findings judged real (strict pass) or matching a seeded defect are
 clustered across ALL runs; two findings are one issue when they cite the same file
@@ -27,7 +27,12 @@ COLS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"
 
 
 def fhash(f):
-    t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    """Same rule as judge.finding_hash: review-shaped findings keep the hash their
+    cached verdicts were stored under; findings with no "why" hash every field."""
+    if "why" in f:
+        t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    else:
+        t = json.dumps(f, sort_keys=True)
     return hashlib.sha1(t.encode()).hexdigest()[:12]
 
 
@@ -96,6 +101,8 @@ def fit_rates(corpus):
         if "usage" in d and d.get("total_cost_usd"):
             X.append([d["usage"].get(c, 0) for c in COLS])
             y.append(d["total_cost_usd"])
+    if not y:
+        return None, 0, 0.0
     rates, *_ = np.linalg.lstsq(np.array(X, float), np.array(y, float), rcond=None)
     pred = np.array(X, float) @ rates
     err = float(np.max(np.abs(pred - y) / np.array(y)))
@@ -124,7 +131,17 @@ def main():
     corpus = sys.argv[1].rstrip("/")
     rows = load(corpus)
     cluster(rows)
-    rates, n, err = fit_rates(corpus)
+    # Four rates need well over four headless agents to fit; a small corpus borrows
+    # the fit from a larger one: analyze.py <corpus> --rates-from <other-corpus>.
+    rates_corpus = corpus
+    if "--rates-from" in sys.argv:
+        i = sys.argv.index("--rates-from")
+        if i + 1 >= len(sys.argv):
+            sys.exit("usage: analyze.py <corpus-dir> [--rates-from <corpus-dir>]")
+        rates_corpus = sys.argv[i + 1].rstrip("/")
+    rates, n, err = fit_rates(rates_corpus)
+    if n < 8:
+        sys.exit(f"analyze.py: only {n} headless agents to fit 4 rates on; pass --rates-from <larger corpus>")
     print(f"fitted $/Mtok on {n} headless agents (max error {100 * err:.1f}%): "
           + ", ".join(f"{c.split('_')[0] if c != 'cache_creation_input_tokens' else 'cache_write'}"
                       f"{'' if c != 'cache_read_input_tokens' else '_read'}={r * 1e6:.2f}"

@@ -20,12 +20,14 @@ Measured on one repo with Sonnet (`bench/README.md`): 4 staggered forks found 2.
 
 The first argument picks a preset from `presets/`; the default is `review`. Read the preset file before Phase 1: every field below comes from it.
 
-| Preset | Scope | Default N | Triage | Status |
+| Preset | Scope | Default N | Triage | Measured against one agent (Sonnet, `bench/README.md`) |
 |---|---|---|---|---|
-| `review` | repo or subsystem | 4 of 12 | verify and rank | measured |
-| `cleanup` | repo | 8 of 8 | apply, commit per concern | unbenchmarked |
-| `simplify` | a diff | 5 of 5 | apply | unbenchmarked |
-| `security` | repo or subsystem | 4 of 6 | verify and rank | unbenchmarked |
+| `review` | repo or subsystem | 4 of 12 | verify and rank | 2.7× the real issues, same cost per issue (~70K tokens) |
+| `cleanup` | repo | 8 of 8 | apply, commit per concern | 45 vs 1.5 valid proposals per run, a third the cost per proposal (~70K tokens) |
+| `simplify` | a diff | 5 of 5 | apply | 1.9× the issues, 1.8× the cost per issue (1,206-line diff) |
+| `security` | repo or subsystem | 4 of 6 | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue (~17K tokens, ~70KB) |
+
+**Size check, before Phase 1.** Forks pay for themselves by sharing a large recon. Estimate the code in scope at about 4 bytes per token (`wc -c` on the source, or on the diff plus the files it touches). Under roughly 30K tokens (~120KB), skip the recon and the forks: spawn one general-purpose agent with the preset's task, report line, `max_findings`, `recon_extra` and all of the preset's lens briefs inlined (all of them, not the first N, as the measured single-agent arm did). Tell it to write its report to `.tmp/fanout/<run>/single.jsonl`, then triage that file as in Phase 3. It finds less, but each issue costs a third to a little over half as much. Fork anyway when the user asks for maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora. The check applies to every preset, `/code-cleanup` included: cleanup was measured only at 70K.
 
 | Field | Used in |
 |---|---|
@@ -61,6 +63,7 @@ Launching all N in one message makes every fork miss the cache: none of the sibl
 Fork prompt, with the preset's fields and the lens filled in:
 
 ```
+You are one of the forks, not the session that launched them: do not launch agents.
 <TASK>
 You already have the source in context from the recon; read more only if you need to.
 Your method: <LENS BRIEF>
@@ -70,7 +73,7 @@ Write ONLY JSON lines to .tmp/fanout/<run>/<LENS ID>.jsonl with the Write tool, 
 At most <MAX FINDINGS> findings, strongest first. Your text output is not visible; only the file counts.
 ```
 
-The report file existing and non-empty is the delivery signal. A fork that dies silently never reports back, so check the files instead of waiting indefinitely.
+A fork inherits the message that launched it, so without the first line it can act as the launcher: in one benchmark run, three of four security forks each launched another fork and ended without reporting. The report file existing and non-empty is the delivery signal. A fork that dies silently never reports back, so check the files instead of waiting indefinitely.
 
 ## Phase 3: triage (this session is the only writer)
 

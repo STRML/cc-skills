@@ -3,9 +3,10 @@
 # Forks only exist in a live interactive session, so this opens a cmux pane running
 # claude, pastes a recon-then-fork prompt, and waits for one report file per lens.
 #
-#   [STAGGER=1] run-forks.sh <target-repo> <out-dir> <N> <topic|method>
+#   [STAGGER=1] [SRC_DIR="src/"] run-forks.sh <target-repo> <out-dir> <N> <set>
 #
-# Same model and flags as run-headless.sh. Out: <out-dir>/<lens>.jsonl, usage.txt.
+# <set> is a preset or a lenses.json set, as in run-headless.sh. Same model and
+# flags as run-headless.sh. Out: <out-dir>/<lens>.jsonl, usage.txt.
 # Exits non-zero, leaving <out-dir>/FAILED, if any lens fails to report in time.
 set -euo pipefail
 
@@ -18,6 +19,30 @@ config_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 cfg=${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}
 cfg=${cfg:-$HOME/.claude.json}
 target=$(cd "$1" && pwd -P) out=$2 n=$3 set=$4
+field() { python3 -I "$here/preset.py" "$set" "$@"; }
+lenses=$(field lenses "$n")
+src_dir=${SRC_DIR:-src/}
+# The method and topic sets keep the exact wording of the measured review runs.
+if [[ "$set" == method || "$set" == topic ]]; then
+  recon="Read README.md and package.json, then read EVERY non-test .ts and .tsx file under src/ with the Read tool."
+  task="Audit this repository for real bugs: behavior that is wrong for a user. Not style, not refactors."
+  report_line='{"file": "src/...", "line": <number>, "title": "<short>", "why": "<what goes wrong, and when>"}'
+  max=15 tail_note=" Report only bugs you can point to in the code." head_note=""
+else
+  if [[ $(field scope) == diff ]]; then
+    # Without its diff the run would audit nothing and still count as complete.
+    [[ -s "$target/CHANGES.diff" ]] || { echo "run-forks: $set reviews a diff; $target/CHANGES.diff is missing or empty" >&2; exit 1; }
+    recon="Read README.md and the manifest, then read CHANGES.diff (the change set; the repository is at its post-change state), every file it touches in full, and the callers of each changed function."
+  else
+    recon="Read README.md and the manifest, then read EVERY non-test source file in $src_dir with the Read tool."
+  fi
+  extra=$(field recon_extra)
+  [[ -n "$extra" ]] && recon="$recon Then: $(tr '\n' ' ' <<< "$extra")"
+  task=$(field task) report_line=$(field report_line) max=$(field max_findings) tail_note=""
+  # A fork inherits the launch message and can act as the launcher (seen once: three
+  # of four forks each launched another fork and never reported).
+  head_note="You are one of the forks, not the session that launched them: do not launch agents. "
+fi
 
 # A reused output directory would mix two runs' reports in one score.
 if [[ -e "$out" ]] && [[ -n "$(ls -A "$out")" ]]; then
@@ -46,7 +71,7 @@ trap cleanup EXIT
   cat << EOF
 This is a benchmark run. Follow these phases exactly.
 
-Phase 1, recon. Facts only: do not judge code quality or name suspected bugs, in your text or anywhere else. Read README.md and package.json, then read EVERY non-test .ts and .tsx file under src/ with the Read tool. Afterwards write one line listing how many files you read.
+Phase 1, recon. Facts only: do not judge code quality or name suspected bugs, in your text or anywhere else. $recon Afterwards write one line listing how many files you read.
 
 $(if [[ "${STAGGER:-0}" == 1 ]]; then
   echo "Phase 2, fan out in two steps. First launch ONLY the first lens below as one Agent call with subagent_type \"fork\" in the background. As soon as that call has been accepted, in your NEXT message launch the remaining $((n - 1)) lenses as Agent calls with subagent_type \"fork\", all in that one message. Give each fork this prompt, with its lens and id filled in:"
@@ -54,11 +79,11 @@ else
   echo "Phase 2, fan out. In ONE message, launch exactly $n Agent calls with subagent_type \"fork\", one per lens below. Give each fork this prompt, with its lens and id filled in:"
 fi)
 
-"Audit this repository for real bugs: behavior that is wrong for a user. Not style, not refactors. You already have the source in context from the recon; read more only if you need to. Your lens: <LENS>. Report only bugs you can point to in the code. Write ONLY JSON lines, one per finding, no prose, to $bench_rel/<ID>.jsonl with the Write tool: {\"file\": \"src/...\", \"line\": <number>, \"title\": \"<short>\", \"why\": \"<what goes wrong, and when>\"}. At most 15 findings, strongest first. Your text output is not visible to anyone; only the file counts. Then stop."
+"$head_note$task You already have the source in context from the recon; read more only if you need to. Your lens: <LENS>.$tail_note Write ONLY JSON lines, one per finding, no prose, to $bench_rel/<ID>.jsonl with the Write tool: $report_line. At most $max findings, strongest first. Your text output is not visible to anyone; only the file counts. Then stop."
 
 Lenses:
 EOF
-  jq -r --arg s "$set" --argjson n "$n" '.[$s][:$n][] | "- id \(.id): \(.brief)"' "$here/lenses.json"
+  while IFS=$'\t' read -r id brief; do echo "- id $id: $brief"; done <<< "$lenses"
   cat << EOF
 
 Phase 3. When all $n files exist in $bench_rel/, reply with exactly: BENCH-DONE
@@ -85,13 +110,18 @@ surface=$(awk '/^OK/ {print $2; exit}' <<< "$pane")
 screen() { cmux read-screen --surface "$surface" --workspace "$CMUX_WORKSPACE_ID" --lines 40 2> /dev/null; }
 # Paste only once claude's input box is up; a paste sent earlier is lost.
 for _ in $(seq 1 30); do screen | grep -q 'shift+tab to cycle' && break; sleep 2; done
-for _ in 1 2 3; do
-  cmux paste --surface "$surface" --workspace "$CMUX_WORKSPACE_ID" --submit - < "$prompt" > /dev/null || true
-  sleep 8
-  # A long paste shows collapsed as "[Pasted text #1 +N lines]", not its text.
-  screen | grep -q -E 'Phase 1|Pasted text' && break
+# Paste once: a retry after a slow render queues the whole benchmark twice. Delivery
+# shows as the prompt itself (collapsed to "[Pasted text #1 +N lines]" when long),
+# or, once claude is working and the prompt has scrolled off, as tool calls (⏺) or
+# the "esc to interrupt" footer.
+cmux paste --surface "$surface" --workspace "$CMUX_WORKSPACE_ID" --submit - < "$prompt" > /dev/null \
+  || { echo "run-forks: cmux paste failed" >&2; exit 1; }
+delivered=0
+for _ in $(seq 1 15); do
+  screen | grep -q -E 'Phase 1|Pasted text|⏺|esc to interrupt' && { delivered=1; break; }
+  sleep 2
 done
-screen | grep -q -E 'Phase 1|Pasted text' || { echo "run-forks: prompt never reached the pane" >&2; exit 1; }
+[[ $delivered -eq 1 ]] || { echo "run-forks: prompt never reached the pane" >&2; exit 1; }
 
 failed=0
 deadline=$((started + 1200))

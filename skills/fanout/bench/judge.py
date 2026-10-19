@@ -3,6 +3,9 @@
 
     judge.py <corpus-dir>            judge unjudged findings, then score
     judge.py <corpus-dir> --score    score only, from the existing verdicts
+    judge.py <corpus-dir> --preset <name>
+                                     judge against a preset's own bar (its task and
+                                     keep_if) instead of "is it a bug"; one strict pass
 
 <corpus-dir> holds answer-key.json, target/, and runs/<run>/<agent>.jsonl.
 Findings are pooled, deduplicated by exact text, shuffled and stripped of their
@@ -40,8 +43,13 @@ def first_json_object(raw):
     return obj if isinstance(obj, dict) else {}
 
 
-def load_findings(corpus):
-    """[(run, agent, finding-dict, key)] for every parseable finding line."""
+def load_findings(corpus, full=False):
+    """[(run, agent, finding, hash, text)] for every parseable finding line.
+
+    The hash always covers file, line, title and why, so analyze.py can match it.
+    With full=True the text shown to the judge is the whole finding (a cleanup
+    proposal's evidence and change, not only its title).
+    """
     out = []
     for path in sorted(glob.glob(f"{corpus}/runs/*/*.jsonl")):
         run = os.path.basename(os.path.dirname(path))
@@ -55,8 +63,98 @@ def load_findings(corpus):
             except json.JSONDecodeError:
                 continue
             text = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
-            out.append((run, agent, f, hashlib.sha1(text.encode()).hexdigest()[:12], text))
+            out.append((run, agent, f, finding_hash(f), json.dumps(f) if full else text))
     return out
+
+
+def finding_hash(f):
+    """Review-shaped findings (with "why") keep the hash their cached verdicts were
+    stored under. Others (a cleanup proposal: evidence and change, no why) hash every
+    field, so two proposals at one file, line and title stay distinct."""
+    if "why" in f:
+        t = f"{f.get('file')}:{f.get('line')} {f.get('title')} — {f.get('why')}"
+    else:
+        t = json.dumps(f, sort_keys=True)
+    return hashlib.sha1(t.encode()).hexdigest()[:12]
+
+
+def codex(corpus, prompt):
+    """One read-only Codex call in the target; the first JSON object of its reply."""
+    with tempfile.NamedTemporaryFile("r", suffix=".txt", delete=False) as last:
+        last_path = last.name
+    subprocess.run(["codex", "exec", "-s", "read-only", "-m", JUDGE_MODEL,
+                    "-C", f"{corpus}/target", "-o", last_path, prompt],
+                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    raw = open(last_path).read()
+    os.unlink(last_path)
+    return first_json_object(raw)
+
+
+def preset_judge(corpus, findings, name, key):
+    """Judge every finding against the preset's own bar, in one strict pass.
+
+    Writes verdicts.json ("D<n>" | "real" | "not-a-bug" | "unsure") and the
+    matching verdicts-strict.json, the two files analyze.py reads. "real" here
+    means the finding meets the preset's bar: a valid cleanup, a real
+    simplification. "D<n>" is a match to a documented issue in answer-key.json,
+    when the corpus has one (DVNA's published vulnerability list, for example).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    preset = json.load(open(os.path.join(here, "..", "presets", f"{name}.json")))
+    vpath, spath = f"{corpus}/verdicts.json", f"{corpus}/verdicts-strict.json"
+    # Cached verdicts belong to one rubric. A corpus judged under another preset (or
+    # the bug-only judge) must not have its verdicts reused under this one.
+    mark = f"{corpus}/judge-rubric.txt"
+    # The lock lives only as long as the verdicts it guards: with verdicts.json moved
+    # aside, a stale judge-rubric.txt no longer blocks a fresh judgment.
+    used = None
+    if os.path.exists(vpath):
+        used = open(mark).read().strip() if os.path.exists(mark) else "bugs"
+    if used not in (None, name):
+        sys.exit(f"judge.py: {corpus} was judged under '{used}'; move its verdicts*.json aside to judge as '{name}'")
+    open(mark, "w").write(name + "\n")
+    verdicts = json.load(open(vpath)) if os.path.exists(vpath) else {}
+    strict_v = json.load(open(spath)) if os.path.exists(spath) else {}
+    known, known_rule = "", ""
+    if key:
+        known = "\nThe code has these documented issues:\n" + "\n".join(
+            f"{d['id']}: {d['fix_subject']} (files: {', '.join(d['files'])})" for d in key) + "\n"
+        known_rule = ('- "D<n>" if it describes that documented issue (the same flaw at the same place; '
+                      "wording may differ) and meets the bar below.\n")
+    todo = {h: t for _, _, _, h, t in findings if h not in verdicts}
+    items = list(todo.items())
+    random.Random(0).shuffle(items)
+    for i in range(0, len(items), 20):
+        chunk = items[i:i + 20]
+        ids = {f"f{j}": h for j, (h, _) in enumerate(chunk)}
+        listing = "\n".join(f"{fid}: {todo[h]}" for fid, h in ids.items())
+        prompt = f"""You are a strict senior maintainer of the code in the current directory (read-only).
+Each finding below was written by an agent given this task:
+  {preset['task']}
+Most such findings are wrong: the evidence does not hold, the change would break something, or it is churn.
+{known}
+For each finding, open the cited code, its callers and anything else it depends on, then decide:
+{known_rule}- "real" ONLY if {preset['keep_if']} Give the concrete case in one line.
+- "not-a-bug" if it fails that bar.
+- "unsure" if you cannot confirm either way.
+
+Findings:
+{listing}
+
+Reply with ONLY a JSON object mapping each finding id to {{"verdict": "...", "scenario": "<one line, or empty>"}}."""
+        got = codex(corpus, prompt)
+        for fid, h in ids.items():
+            v = got.get(fid)
+            if not v:
+                MISSED.append(h)
+                continue
+            v = v if isinstance(v, dict) else {"verdict": str(v), "scenario": ""}
+            verdicts[h] = v.get("verdict", "unsure")
+            strict_v[h] = v
+        json.dump(verdicts, open(vpath, "w"), indent=1)
+        json.dump(strict_v, open(spath, "w"), indent=1)
+        print(f"judged {min(i + 20, len(items))}/{len(items)}", file=sys.stderr)
+    return verdicts
 
 
 def judge_batch(corpus, key, items):
@@ -240,6 +338,18 @@ def score(corpus, findings, verdicts, key):
 def main():
     corpus = sys.argv[1].rstrip("/")
     key = json.load(open(f"{corpus}/answer-key.json"))
+    if "--preset" in sys.argv:
+        name = sys.argv[sys.argv.index("--preset") + 1]
+        findings = load_findings(corpus, full=True)
+        verdicts = preset_judge(corpus, findings, name, key)
+        score(corpus, findings, verdicts, key)
+        if MISSED:
+            print(f"judge.py: {len(set(MISSED))} finding(s) got no verdict; rerun to retry them", file=sys.stderr)
+            sys.exit(2)
+        return
+    mark = f"{corpus}/judge-rubric.txt"
+    if os.path.exists(mark) and open(mark).read().strip() != "bugs":
+        sys.exit(f"judge.py: {corpus} was judged under preset '{open(mark).read().strip()}'; pass --preset")
     findings = load_findings(corpus)
     if "--score" in sys.argv:
         verdicts = json.load(open(f"{corpus}/verdicts.json"))

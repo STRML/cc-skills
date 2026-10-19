@@ -12,4 +12,4 @@ recon once ─▶ fork 1 ─▶ forks 2..8 ─▶ 8 reports ─▶ this session 
            ─▶ typecheck + tests + commit after each concern
 ```
 
-The fanout skill holds the whole procedure: the recon, the staggered launch, the fork prompt, the triage and the apply order. Follow it as written; this command adds nothing to it.
+The fanout skill holds the whole procedure: the size check, the recon, the staggered launch, the fork prompt, the triage and the apply order. Follow it as written; this command adds nothing to it. On a small repo the size check runs one agent instead of eight forks.
