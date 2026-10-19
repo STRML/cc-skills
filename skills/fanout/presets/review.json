@@ -1,5 +1,14 @@
 {
   "_doc": "Review preset: method lenses, measured to find more unique real issues than topic lenses (see bench/README.md). A run with N lenses takes the first N.",
+  "status": "measured",
+  "scope": "repo",
+  "default_n": 4,
+  "task": "Audit this code for real bugs: behavior that is wrong for a user. Not style, not refactors.",
+  "recon_extra": [],
+  "report_line": "{\"file\": \"...\", \"line\": <n>, \"title\": \"<short>\", \"why\": \"<what goes wrong, and when>\"}",
+  "max_findings": 15,
+  "triage": "verify",
+  "keep_if": "you can state a concrete scenario: the input or event sequence, the wrong result and the right one.",
   "lenses": [
     {
       "id": "dataflow",
