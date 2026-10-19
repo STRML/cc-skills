@@ -1,0 +1,50 @@
+{
+  "_doc": "Cleanup preset, the engine behind /code-cleanup. Each lens is one cleanup concern, so a run uses all of them. Not benchmarked: the lenses are the /code-cleanup mandates as they shipped before /fanout.",
+  "status": "unbenchmarked",
+  "scope": "repo",
+  "default_n": 8,
+  "task": "Find cleanup work in this codebase within your concern only, and propose each change with the evidence that makes it safe. Do not report bugs or style outside your concern.",
+  "recon_extra": [
+    "Read the lint and type config (tsconfig, ESLint, ruff.toml, clippy.toml, .editorconfig) and the test layout.",
+    "Check which cleanup tools are installed and actually run: knip, ts-prune, madge, depcheck, vulture, deadcode, pydeps, cargo machete, cargo udeps. Note the working ones; forks use only those."
+  ],
+  "report_line": "{\"file\": \"...\", \"line\": <n>, \"sites\": [\"path:line\", ...every site, not a sample], \"title\": \"<short>\", \"evidence\": \"<the grep output, AST match or tool output that proves it>\", \"change\": \"<concrete enough to apply without re-investigating; a diff when short>\", \"confidence\": \"high|medium|low\", \"risk\": \"<what could break: dynamic wiring, reflection, public API, generated code>\", \"conflicts\": \"<other concerns this change touches, or empty>\"}",
+  "max_findings": 40,
+  "triage": "apply",
+  "keep_if": "the evidence still holds when you re-check it in the code.",
+  "apply_order": ["legacy", "dead-code", "cycles", "types", "dedup", "weak-types", "defensive", "slop"],
+  "lenses": [
+    {
+      "id": "dedup",
+      "brief": "Deduplicate. Find repeated logic across the codebase. Propose DRY only where it cuts real complexity, never abstraction for its own sake; leave three-line repetition alone."
+    },
+    {
+      "id": "types",
+      "brief": "Consolidate types. Find type definitions duplicated across files or packages. Propose one source of truth for each shared shape and list every import that must change."
+    },
+    {
+      "id": "dead-code",
+      "brief": "Dead code. Run the cleanup tools the recon confirmed work. Find unreferenced exports, files and dependencies. Grep the full tree, tests, configs and dynamic imports included, before calling anything dead."
+    },
+    {
+      "id": "cycles",
+      "brief": "Circular dependencies. Run madge, pydeps or the equivalent. For each cycle, propose the break: invert a dependency or extract the shared piece. Never propose masking it with lazy imports."
+    },
+    {
+      "id": "weak-types",
+      "brief": "Weak types. Find every any, unknown, object, {}, Python Any, Go interface{} and Rust Box<dyn Any>. Read the call sites and upstream types, and propose the real type for each."
+    },
+    {
+      "id": "defensive",
+      "brief": "Defensive programming. Find every try/catch and equivalent. Keep only those handling real external input, documented failure modes, or boundaries the caller cannot cross. Propose removing empty catches, silent fallbacks and speculative guards."
+    },
+    {
+      "id": "legacy",
+      "brief": "Legacy paths. Find deprecated code, compatibility shims, fallback branches, TODO-remove-after-X notes that outlived X, and feature flags long since defaulted. Propose the single canonical path."
+    },
+    {
+      "id": "slop",
+      "brief": "AI slop. Find narration comments, 'replaced old Y with new Z' notes, commented-out code, comments that restate the code, and stub scaffolds. Keep comments that explain why, constraints or non-obvious invariants; propose rewrites of those for a new reader, with no references to prior versions."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "_doc": "Simplify preset: a change set (a branch, a PR, uncommitted work), not the whole repo. Recon reads the diff and everything it touches. Not benchmarked. On a small diff a single pass is cheaper: the shared recon is what forks save, and a small diff has little of it.",
+  "status": "unbenchmarked",
+  "scope": "diff",
+  "default_n": 5,
+  "task": "Review this change set for ways to make it simpler, with the same behavior. Not bugs, not style nits: code that could be shorter, flatter, reuse what exists, or be deleted.",
+  "recon_extra": [
+    "Find the base (the PR base, the branch's merge-base with the default branch, or HEAD for uncommitted work) and read the full diff.",
+    "Read every file the diff touches in full, then the callers of each changed function and the helpers in the same modules."
+  ],
+  "report_line": "{\"file\": \"...\", \"line\": <n>, \"title\": \"<short>\", \"why\": \"<what is more complex than it needs to be>\", \"change\": \"<the simpler version; a diff when short>\", \"confidence\": \"high|medium|low\"}",
+  "max_findings": 15,
+  "triage": "apply",
+  "keep_if": "the simpler version has the same behavior, which you confirm by reading every caller, and it is clearly simpler to a reader rather than only shorter.",
+  "apply_order": ["dead-after", "reuse", "altitude", "flatten", "efficiency"],
+  "lenses": [
+    {
+      "id": "reuse",
+      "brief": "Method: for each new function, block and constant in the diff, search the rest of the codebase and its dependencies for something that already does it. Report each reimplementation and the existing thing to call instead."
+    },
+    {
+      "id": "altitude",
+      "brief": "Method: for each new abstraction (a class, an option, a parameter, a layer of indirection, a config value), count its real callers and variants today. Report the ones that serve one caller or a future that is not in the diff."
+    },
+    {
+      "id": "flatten",
+      "brief": "Method: rewrite each changed function in your head as flat as it can go: guard clauses for nested ifs, a lookup table for a long if/else chain, one job per function. Report where the rewrite is clearly simpler."
+    },
+    {
+      "id": "efficiency",
+      "brief": "Method: trace each changed loop, query and render path. Report work repeated per item or per call that could happen once, and data loaded and then mostly discarded."
+    },
+    {
+      "id": "dead-after",
+      "brief": "Method: list what the diff replaces. Find code, branches, parameters, exports and tests that the change made unreachable or redundant but left in place."
+    }
+  ]
+}

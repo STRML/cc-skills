@@ -33,7 +33,7 @@ skills/     Skills — invoke via the Skill tool
 
 | Name | Type | What it does |
 |---|---|---|
-| [`/code-cleanup`](commands/code-cleanup.md) | command | Maps the repo once, then forks eight cache-sharing subagents, one per concern (dead code, weak types, AI slop, ...) |
+| [`/code-cleanup`](commands/code-cleanup.md) | command | Runs `fanout`'s cleanup preset: eight forked concerns (dead code, weak types, AI slop, ...), applied one commit per concern |
 | [`/check-pr-reviews`](commands/check-pr-reviews.md) | command | Fetch and address review comments on the current branch's PR |
 | [`recall`](skills/recall/SKILL.md) | skill | Search past Claude Code sessions |
 | [`compound`](skills/compound/SKILL.md) | skill | Save a hard-won fix's root cause into project memory |
@@ -46,20 +46,20 @@ skills/     Skills — invoke via the Skill tool
 | [`session-close-sweep`](skills/session-close-sweep/SKILL.md) | skill | End-of-session audit of issues, git state and docs |
 | [`progress-dashboard`](skills/progress-dashboard/SKILL.md) | skill | Live local HTML dashboard for long agent runs |
 | [`migrate-to`](skills/migrate-to/SKILL.md) | skill | Fork the running session onto another machine over ssh |
-| [`fanout`](skills/fanout/SKILL.md) | skill | Deep bug review: map the repo once, fork N method lenses with a staggered launch, triage in one place |
+| [`fanout`](skills/fanout/SKILL.md) | skill | Map the code once, fork N lenses from a preset (review, cleanup, simplify, security), triage in one place |
 
 ## Commands
 
 ### [`/code-cleanup`](commands/code-cleanup.md)
 
-Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch: one first, the other seven in the next message, so the first warms the prompt cache and the rest read the shared prefix from it. Each inherits the full conversation, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
+Deep codebase cleanup that maps the repo once, then forks eight subagents off that map. It is the `cleanup` preset of [`fanout`](#fanout), which holds the procedure. The order is the point. Recon (tree, build, typecheck and test commands, conventions) happens first, in your own session, so it becomes conversation history. Then eight `fork` subagents launch: one first, the other seven in the next message, so the first warms the prompt cache and the rest read the shared prefix from it. Each inherits the full conversation, so none of them re-reads the repo or needs a brief pasted in. The eighth fork costs far less than the first.
 
 ```
 your session: recon ─▶ map of the repo, now in context (cached prefix)
                   ├─▶ fork 1  dedup          ┐
                   ├─▶ fork 2  shared types   │  all eight inherit the map,
                   ├─▶  ...                   │  run in parallel, and write
-                  └─▶ fork 8  AI slop        ┘  .tmp/code-cleanup/reports/
+                  └─▶ fork 8  AI slop        ┘  .tmp/fanout/<run>/
 your session: triage the eight reports ─▶ apply edits, one concern per commit
 ```
 
@@ -72,9 +72,9 @@ Each fork owns one concern:
 5. Replace weak types (`any`, `unknown`, `interface{}`) with real ones
 6. Strip defensive programming that hides errors instead of handling them
 7. Delete deprecated code, compat shims, and orphaned feature flags
-8. Remove AI slop — narration comments, stubs, commented-out code
+8. Remove AI slop: narration comments, stubs, commented-out code
 
-The forks never edit. Eight writers on one working tree would walk over each other, and eight worktrees are impractical, so each fork writes a report of proposed changes with evidence and a confidence rating. Your session then triages all eight: it merges overlapping proposals, asks before anything that could break dynamic wiring or a public API, and applies the rest one concern at a time, with typecheck and tests (and a commit) after each. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to the Agent-tool + cached-prefix recipe.
+The forks never edit. Eight writers on one working tree would walk over each other, and eight worktrees are impractical, so each fork writes a report of proposed changes with evidence and a confidence rating. Your session then triages all eight: it merges overlapping proposals, asks before anything that could break dynamic wiring or a public API, and applies the rest one concern at a time, with typecheck and tests (and a commit) after each. Dispatch uses the built-in `subagent_type: "fork"` (Claude Code ≥ 2.1.229); older versions fall back to general-purpose subagents sharing a cached prefix. The `/code-cleanup` command needs the `fanout` skill installed.
 
 ### [`/check-pr-reviews`](commands/check-pr-reviews.md)
 
@@ -128,9 +128,18 @@ A live HTML dashboard for long agent runs: an epic, a PR landing queue, hours of
 
 ### [`fanout`](skills/fanout/SKILL.md)
 
-A deep bug review that maps the repo once, then forks N subagents that each look at the code by a different method: trace data flow, break the documented invariants, diff code that should behave the same, walk the boundary cases. The forks inherit the map and only write reports; your session deduplicates, verifies and ranks the findings.
+Maps the code once, then forks N subagents that inherit the map and each look at it through one lens from a preset. The forks only write reports; your session deduplicates and verifies them, then either ranks the findings or applies them in order.
 
-Measured on react-grid-layout with Sonnet 5.5 against a corpus of reverted bug fixes ([`bench/README.md`](skills/fanout/bench/README.md)):
+| Preset | What it does | Triage | Status |
+|---|---|---|---|
+| [`review`](skills/fanout/presets/review.json) | bug hunt by method: trace data flow, break invariants, diff code that should match, walk boundaries | verify and rank | measured |
+| [`cleanup`](skills/fanout/presets/cleanup.json) | the eight `/code-cleanup` concerns | apply, commit per concern | unbenchmarked |
+| [`simplify`](skills/fanout/presets/simplify.json) | a diff or PR: reuse, needless abstraction, flattening, repeated work, code the change left dead | apply | unbenchmarked |
+| [`security`](skills/fanout/presets/security.json) | taint to sinks, authorization, guard parity, secrets and config, crypto and sessions, attacker walk | verify and rank | unbenchmarked |
+
+`/fanout security src/api` picks a preset and a scope; `/fanout` alone runs `review` over the repo.
+
+The engine and the `review` preset were measured on react-grid-layout with Sonnet 5.5 against a corpus of reverted bug fixes ([`bench/README.md`](skills/fanout/bench/README.md)):
 
 | | Real issues per run | Cost per run |
 |---|---|---|
@@ -140,7 +149,7 @@ Measured on react-grid-layout with Sonnet 5.5 against a corpus of reverted bug f
 
 Two things carry most of that. Launch one fork first and the rest in the next message: launched together, every fork rebuilt the shared prefix (each wrote ~154K cache tokens), and staggering cut the forks' cache writes 6.4×. And split lenses by method rather than topic, which found more issues no other configuration did. Starting agents fresh did not buy more coverage; a second forked batch is the cheaper way to get it.
 
-Only the review preset ships. Cleanup, simplify, security and test-audit presets were not measured, so they are left out rather than built on faith. `/code-cleanup` keeps its own lenses but now uses the staggered launch. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
+The other presets reuse the measured engine (recon, staggered launch, one writer) with their own lenses; their lenses have not been benchmarked against a single pass. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
 
 ## Contributing
 

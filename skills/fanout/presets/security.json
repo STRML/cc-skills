@@ -1,0 +1,41 @@
+{
+  "_doc": "Security preset: method lenses for an audit of the code itself (not dependency CVEs, which need a scanner). Not benchmarked.",
+  "status": "unbenchmarked",
+  "scope": "repo",
+  "default_n": 4,
+  "task": "Audit this code for security vulnerabilities an attacker can reach. Not hardening advice, not style.",
+  "recon_extra": [
+    "List the entry points an outsider can reach (routes, handlers, CLI arguments, message consumers, file and network inputs) and the auth middleware in front of each.",
+    "Note where secrets and credentials are loaded and which config values change security behavior."
+  ],
+  "report_line": "{\"file\": \"...\", \"line\": <n>, \"title\": \"<short>\", \"why\": \"<who can do what: the attacker's position, the input, and the impact>\", \"severity\": \"critical|high|medium|low\"}",
+  "max_findings": 15,
+  "triage": "verify",
+  "keep_if": "you can state a concrete attack: who the attacker is and what they can already reach, the exact input, and what they gain. Unreachable sinks and defense-in-depth suggestions are dropped.",
+  "lenses": [
+    {
+      "id": "taint",
+      "brief": "Method: start from each input an outsider controls and trace it through every function it reaches. Report each place it reaches a dangerous sink (SQL, shell, file path, HTML, URL fetch, deserializer, eval, redirect) without validation that fits that sink."
+    },
+    {
+      "id": "authz",
+      "brief": "Method: for each entry point, write down who should be allowed to call it and on which objects. Then read what the code actually checks. Report missing checks, checks on the wrong object (IDOR), and checks done after the side effect."
+    },
+    {
+      "id": "parity",
+      "brief": "Method: find pairs of code that should enforce the same rule (the create and update endpoints, the API and the UI path, the v1 and v2 handler, the batch and the single-item path) and diff their checks. Report every guard present in one and missing in its twin."
+    },
+    {
+      "id": "secrets-config",
+      "brief": "Method: follow every secret, key, token and security-relevant setting from where it is loaded to where it is used and logged. Report hard-coded credentials, secrets in logs or errors, insecure defaults, and debug switches reachable in production."
+    },
+    {
+      "id": "crypto-session",
+      "brief": "Method: read every use of hashing, encryption, random numbers, tokens, cookies and sessions. Check the algorithm, the key and nonce handling, comparison timing, expiry and revocation against what an attacker could exploit."
+    },
+    {
+      "id": "adversary",
+      "brief": "Method: act as an attacker with an ordinary account. Pick the most valuable data or action in the system and try every path to it: replayed requests, out-of-order steps, races, oversized and malformed input."
+    }
+  ]
+}
