@@ -47,6 +47,7 @@ skills/     Skills — invoke via the Skill tool
 | [`progress-dashboard`](skills/progress-dashboard/SKILL.md) | skill | Live local HTML dashboard for long agent runs |
 | [`migrate-to`](skills/migrate-to/SKILL.md) | skill | Fork the running session onto another machine over ssh |
 | [`fanout`](skills/fanout/SKILL.md) | skill | Map the code once, fork N lenses from a preset (review, cleanup, simplify, security), triage in one place |
+| [`pr-review`](skills/pr-review/SKILL.md) | skill | Read-only review of one PR at one head SHA for a webhook-triggered routine: guards, four lenses, verify pass, one structured review ([setup](skills/pr-review/SETUP.md)) |
 
 ## Commands
 
