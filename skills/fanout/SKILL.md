@@ -53,7 +53,7 @@ Build the map in the conversation, because every fork inherits exactly what is h
 
 ## Phase 2: fan out with a staggered launch
 
-Resolve `<RUN DIR>` once: run `printenv TMPDIR` as its own Bash call (never chained with `cd`, `cat` or `git`), then `mkdir -p <that path>/fanout/<run>` and use the absolute result everywhere below, because the Write tool does not expand `$TMPDIR`. `<run>` names the preset and the date. If the `mkdir` fails, stop and tell the user; do not fall back to another directory. Reports stay out of the working tree. Take the first N lenses from the preset; N defaults to its `default_n`. For `review`, N=8 found 27% more issues for 46% more cost, so use it when coverage matters more than budget. Below N=3, forking costs the same as fresh agents.
+Resolve `<RUN DIR>` once: run `printenv TMPDIR` as its own Bash call (never chained with `cd`, `cat` or `git`), then `mkdir -p <that path>/fanout/<run>` and use the absolute result everywhere below, because the Write tool does not expand `$TMPDIR`. `<run>` names the preset and the date. If `printenv` prints nothing or a path that does not start with `/`, or the `mkdir` fails, stop and tell the user; do not fall back to another directory. Reports stay out of the working tree. Take the first N lenses from the preset; N defaults to its `default_n`. For `review`, N=8 found 27% more issues for 46% more cost, so use it when coverage matters more than budget. Below N=3, forking costs the same as fresh agents.
 
 1. Launch **lens 1 alone**: one Agent call, `subagent_type: "fork"`, in the background.
 2. In your **next** message, launch lenses 2..N together.

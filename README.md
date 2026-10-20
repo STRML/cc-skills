@@ -59,7 +59,7 @@ your session: recon ─▶ map of the repo, now in context (cached prefix)
                   ├─▶ fork 1  dedup          ┐
                   ├─▶ fork 2  shared types   │  all eight inherit the map,
                   ├─▶  ...                   │  run in parallel, and write
-                  └─▶ fork 8  AI slop        ┘  .tmp/fanout/<run>/
+                  └─▶ fork 8  AI slop        ┘  $TMPDIR/fanout/<run>/
 your session: triage the eight reports ─▶ apply edits, one concern per commit
 ```
 
