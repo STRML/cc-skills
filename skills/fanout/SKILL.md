@@ -10,7 +10,7 @@ argument-hint: "[review|cleanup|simplify|security] [N lenses] [path, subsystem o
 recon (this session, facts only) ─▶ map of the code, now in context
   ├─▶ fork 1 alone      ─▶ warms the prompt cache with that map
   └─▶ forks 2..N, next message ─▶ read the map from cache, one lens each
-each fork ─▶ .tmp/fanout/<run>/<lens>.jsonl   (read-only, never edits)
+each fork ─▶ $TMPDIR/fanout/<run>/<lens>.jsonl   (read-only, never edits)
 this session ─▶ cluster duplicates ─▶ verify against the code ─▶ rank, or apply in order
 ```
 
@@ -27,7 +27,7 @@ The first argument picks a preset from `presets/`; the default is `review`. Read
 | `simplify` | a diff | 5 of 5 | apply | 1.9× the issues, 1.8× the cost per issue (1,206-line diff) |
 | `security` | repo or subsystem | 4 of 6 | verify and rank | 15 vs 11-12 of 19 known vulns, 3× the cost per issue (~17K tokens, ~70KB) |
 
-**Size check, before Phase 1.** Forks pay for themselves by sharing a large recon. Estimate the code in scope at about 4 bytes per token (`wc -c` on the source, or on the diff plus the files it touches). Under roughly 30K tokens (~120KB), skip the recon and the forks: spawn one general-purpose agent with the preset's task, report line, `max_findings`, `recon_extra` and all of the preset's lens briefs inlined (all of them, not the first N, as the measured single-agent arm did). Tell it to write its report to `.tmp/fanout/<run>/single.jsonl`, then triage that file as in Phase 3. It finds less, but each issue costs a third to a little over half as much. Fork anyway when the user asks for maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora. The check applies to every preset, `/code-cleanup` included: cleanup was measured only at 70K.
+**Size check, before Phase 1.** Forks pay for themselves by sharing a large recon. Estimate the code in scope at about 4 bytes per token (`wc -c` on the source, or on the diff plus the files it touches). Under roughly 30K tokens (~120KB), skip the recon and the forks: spawn one general-purpose agent with the preset's task, report line, `max_findings`, `recon_extra` and all of the preset's lens briefs inlined (all of them, not the first N, as the measured single-agent arm did). Tell it to write its report to `<RUN DIR>/single.jsonl` (defined in Phase 2), then triage that file as in Phase 3. It finds less, but each issue costs a third to a little over half as much. Fork anyway when the user asks for maximum coverage. The 30K line is a guess between the measured 17K and 70K corpora. The check applies to every preset, `/code-cleanup` included: cleanup was measured only at 70K.
 
 | Field | Used in |
 |---|---|
@@ -53,7 +53,7 @@ Build the map in the conversation, because every fork inherits exactly what is h
 
 ## Phase 2: fan out with a staggered launch
 
-`mkdir -p .tmp/fanout/<run>`, where `<run>` names the preset and the date. Take the first N lenses from the preset; N defaults to its `default_n`. For `review`, N=8 found 27% more issues for 46% more cost, so use it when coverage matters more than budget. Below N=3, forking costs the same as fresh agents.
+Resolve `<RUN DIR>` once: run `printenv TMPDIR` as its own Bash call (never chained with `cd`, `cat` or `git`), then `mkdir -p <that path>/fanout/<run>` and use the absolute result everywhere below, because the Write tool does not expand `$TMPDIR`. `<run>` names the preset and the date. If the `mkdir` fails, stop and tell the user; do not fall back to another directory. Reports stay out of the working tree. Take the first N lenses from the preset; N defaults to its `default_n`. For `review`, N=8 found 27% more issues for 46% more cost, so use it when coverage matters more than budget. Below N=3, forking costs the same as fresh agents.
 
 1. Launch **lens 1 alone**: one Agent call, `subagent_type: "fork"`, in the background.
 2. In your **next** message, launch lenses 2..N together.
@@ -68,7 +68,8 @@ You are one of the forks, not the session that launched them: do not launch agen
 You already have the source in context from the recon; read more only if you need to.
 Your method: <LENS BRIEF>
 You are read-only: do not edit, create or delete any file except your report.
-Write ONLY JSON lines to .tmp/fanout/<run>/<LENS ID>.jsonl with the Write tool, one per finding:
+Every path:line and quoted output in your report must come from a tool call you made in this run; drop a finding you cannot cite.
+Write ONLY JSON lines to <RUN DIR>/<LENS ID>.jsonl with the Write tool, one per finding:
 <REPORT LINE>
 At most <MAX FINDINGS> findings, strongest first. Your text output is not visible; only the file counts.
 ```
@@ -79,8 +80,9 @@ A fork inherits the message that launched it, so without the first line it can a
 
 1. Read every report in full.
 2. Cluster duplicates: two findings are one item when they describe the same behavior or change at the same place. Expect a third or more of findings to be repeats across lenses. Where two proposed changes conflict, keep the more conservative one.
-3. Verify each item by reading the cited code. Drop it if the behavior is intended, guarded elsewhere, unreachable, or outside the preset's task. Keep it only if the preset's `keep_if` holds.
-4. Then follow the preset's `triage`.
+3. Verify each item by reading the cited code. Drop it if the behavior is intended, guarded elsewhere, unreachable, or outside the preset's task. Keep it only if the preset's `keep_if` holds. Reject a finding whose `path:line` or quoted output you cannot reproduce with your own tool call.
+4. Compute every total (findings, files, lines) from the per-lens counts or from `git diff --shortstat` before writing it into a report, commit message or PR body.
+5. Then follow the preset's `triage`.
 
 **`verify`** (review, security): rank by impact and report one line per item with `path:line`, the scenario, and which lenses found it. Agreement across methods is evidence; a single lens is not a demerit. Make edits only if the user asks for fixes, then apply one item at a time and run the tests after each.
 
@@ -91,7 +93,7 @@ A fork inherits the message that launched it, so without the first line it can a
 3. After each lens, run typecheck and tests. Green: commit it as `<preset>(<lens>): ...`. Red: fix it, or revert that lens's batch before moving on.
 4. End with the skipped and medium- or low-confidence items as a follow-up checklist.
 
-Delete `.tmp/fanout/<run>/` when done.
+Delete `<RUN DIR>` when done.
 
 ## Rules
 
