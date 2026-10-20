@@ -57,6 +57,7 @@ one, then the rest  fork first request: read 209K  write <1K    (forks 2..4)
 
 ## Caveats
 
+- Every number here predates the fork-prompt provenance clause ("every path:line and quoted output must come from a tool call in this run"), added 2026-10-20. Costs and recall were not re-measured with it.
 - One repo (react-grid-layout, TypeScript, ~70K tokens of source), one model (Sonnet 5.5), one judge family (Codex). The other presets add DVNA and one react-grid-layout diff, with 2 runs per arm.
 - DVNA is a well-known teaching app, so agents may recognize it; its `docs/`, which list the answers, were left out of the target. Its 19 documented vulnerabilities serve as the recall key.
 - The cleanup single agent had Bash, like the forks, so it could run the dead-code and cycle scanners. The other headless arms were read-only.
