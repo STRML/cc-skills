@@ -25,7 +25,6 @@ AMOS/Odyssey|/private/tmp/.pass
 AMOS/Odyssey|/private/tmp/update
 AMOS/Odyssey|/private/tmp/out.zip
 AMOS/Odyssey|/private/tmp/pizda
-Stealers (various)|~/.cache/.sys_auth
 FlexibleFerret|~/Library/LaunchAgents/com.zoom.plist
 FlexibleFerret|/private/var/tmp/logd
 FlexibleFerret|/private/var/tmp/zoom

@@ -32,7 +32,8 @@ plist_flags() {
     com.apple.*)
       # Apple's own jobs live in /System. Here, an Apple name must at least run Apple code,
       # and not a script handed to an Apple-signed interpreter.
-      if [ -n "$signer" ] && ! is_apple "$signer"; then f="$f apple-name-not-apple-signed"
+      # MISSING is sig's sentinel for a binary that is gone; missing-binary already covers it.
+      if [ -n "$signer" ] && [ "$signer" != MISSING ] && ! is_apple "$signer"; then f="$f apple-name-not-apple-signed"
       elif [ -n "$script" ]; then f="$f apple-name-runs-script"; fi ;;
     *.service|*.system|launched.*) f="$f adload-style-label" ;;
     actions.runner.*) f="$f self-hosted-runner" ;;

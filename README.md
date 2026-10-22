@@ -164,7 +164,7 @@ Read-only audit of the Mac you run it on. Collector scripts write pipe-delimited
                  scripts/*.sh ─▶ rows ─▶ verify leads ─▶ ranked report
 ```
 
-It checks what starts on its own (launchd, helpers, extensions, cron, shell startup, MCP servers, agent hooks, git hooks), privacy grants, every browser profile's extensions and policies, listeners and trusted certificates, 56 known malware paths from current stealer and backdoor reports, shell history for pasted lures, and installed packages and lockfiles against OSV (CVEs and the OpenSSF malicious-packages list) and CISA's KEV catalog. Matching runs offline: it downloads the databases and a pinned osv-scanner whose SHA-256 is fixed in the script, and sends no inventory anywhere. Disk sizes are allocated sizes, so sparse VM images and cloud placeholders do not top the list. Commands that need root are handed to you to run. Needs macOS, bash and python3.
+It checks what starts on its own (launchd, helpers, extensions, cron, shell startup, MCP servers, agent hooks, git hooks), privacy grants, every browser profile's extensions and policies, listeners and trusted certificates, 55 known malware paths from current stealer and backdoor reports, shell history for pasted lures, and installed packages and lockfiles against OSV (CVEs and the OpenSSF malicious-packages list) and CISA's KEV catalog. Matching runs offline: it downloads the databases and a pinned osv-scanner whose SHA-256 is fixed in the script, and sends no inventory anywhere. Disk sizes are allocated sizes, so sparse VM images and cloud placeholders do not top the list. Commands that need root are handed to you to run. Needs macOS, bash and python3.
 
 ## Contributing
 
