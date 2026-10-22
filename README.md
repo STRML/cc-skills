@@ -48,6 +48,7 @@ skills/     Skills — invoke via the Skill tool
 | [`migrate-to`](skills/migrate-to/SKILL.md) | skill | Fork the running session onto another machine over ssh |
 | [`fanout`](skills/fanout/SKILL.md) | skill | Map the code once, fork N lenses from a preset (review, cleanup, simplify, security), triage in one place |
 | [`pr-review`](skills/pr-review/SKILL.md) | skill | Read-only review of one PR at one head SHA for a webhook-triggered routine: guards, four lenses, verify pass, one structured review ([setup](skills/pr-review/SETUP.md)) |
+| [`macos-scan`](skills/macos-scan/SKILL.md) | skill | Read-only audit of your Mac: autostart items, permissions, extensions, listeners, known-malware traces, packages against OSV and KEV, unused apps, disk space |
 
 ## Commands
 
@@ -151,6 +152,19 @@ The engine and the `review` preset were measured on react-grid-layout with Sonne
 Two things carry most of that. Launch one fork first and the rest in the next message: launched together, every fork rebuilt the shared prefix (each wrote ~154K cache tokens), and staggering cut the forks' cache writes 6.4×. And split lenses by method rather than topic, which found more issues no other configuration did. Starting agents fresh did not buy more coverage; a second forked batch is the cheaper way to get it.
 
 Every preset was measured against one agent ([`bench/README.md`](skills/fanout/bench/README.md#other-presets)). Forks win when the shared recon is big: review and cleanup ran on ~70K tokens of source. On small code (DVNA's ~17K tokens, a 1,206-line diff) they still find more, at 1.8-3× the cost per issue, so the skill runs one agent below roughly 30K tokens unless you want maximum coverage. The `bench/` scripts rerun the whole measurement on another repo; `scripts/usage.py` shows any session's per-subagent cache reads and writes.
+
+### [`macos-scan`](skills/macos-scan/SKILL.md)
+
+Read-only audit of the Mac you run it on. Collector scripts write pipe-delimited rows to a scan folder; the agent judges them against one phase file per area and writes a ranked report with exact removal commands, a clean/suspicious/compromised verdict, the checks it could not run, and a table of reclaimable space. Nothing is changed or removed until you approve it.
+
+```
+/macos-scan security ─▶ posture  persistence  browsers  apps  network  history  packages
+                          │ each phase runs alone, so they fan out to subagents
+                          ▼
+                 scripts/*.sh ─▶ rows ─▶ verify leads ─▶ ranked report
+```
+
+It checks what starts on its own (launchd, helpers, extensions, cron, shell startup, MCP servers, agent hooks, git hooks), privacy grants, every browser profile's extensions and policies, listeners and trusted certificates, 55 known malware paths from current stealer and backdoor reports, shell history for pasted lures, and installed packages and lockfiles against OSV (CVEs and the OpenSSF malicious-packages list) and CISA's KEV catalog. Matching runs offline: it downloads the databases and a pinned osv-scanner whose SHA-256 is fixed in the script, and sends no inventory anywhere. Disk sizes are allocated sizes, so sparse VM images and cloud placeholders do not top the list. Commands that need root are handed to you to run. Needs macOS, bash and python3.
 
 ## Contributing
 

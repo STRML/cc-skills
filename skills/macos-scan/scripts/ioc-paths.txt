@@ -1,0 +1,60 @@
+# Known malware file paths, checked for existence only by artifacts.sh.
+# Format: family|path[|name-regex]   (~ expands to $HOME; shell globs allowed; the optional
+# regex must match the file name, for patterns a glob cannot express)
+# Sources and caveats: ../references/iocs.md. Keep the two files in sync.
+# A hit is a lead to verify (signature, contents, dates), not a verdict.
+PamStealer|~/Library/Application Support/com.apple.finder.core/Finder.app
+PamStealer|~/Library/Caches/com.apple.finder.core
+PamStealer|/private/tmp/System Settings
+PamStealer|~/Library/LaunchAgents/com.apple.finder.agent.plist
+PamStealer|~/Library/Application Support/System/.repair-run
+PamStealer|~/Library/Application Support/System/.sysnotif-backup.tgz
+CrashStealer|~/Library/LaunchAgents/com.apple.crashreporter.helper.plist
+CrashStealer|~/Library/Caches/com.apple.crashreporter/CrashReporter.app
+CrashStealer|/private/tmp/.CrashReporter
+CrashStealer|~/.cache/com.apple.crashreporter
+AmnesiaStealer|/private/tmp/.com.apple.dt.*
+AmnesiaStealer|~/.pwd
+AmnesiaStealer|~/.local/share/.stream
+AmnesiaStealer|/private/tmp/.tcc_mod.db
+AMOS/Odyssey|/Library/LaunchDaemons/com.finder.helper.plist
+AMOS/Odyssey|~/.agent
+AMOS/Odyssey|~/.mainhelper
+AMOS/Odyssey|~/.pass
+AMOS/Odyssey|/private/tmp/.pass
+AMOS/Odyssey|/private/tmp/update
+AMOS/Odyssey|/private/tmp/out.zip
+AMOS/Odyssey|/private/tmp/pizda
+FlexibleFerret|~/Library/LaunchAgents/com.zoom.plist
+FlexibleFerret|/private/var/tmp/logd
+FlexibleFerret|/private/var/tmp/zoom
+FlexibleFerret|/private/var/tmp/InstallerAlert.app
+FlexibleFerret|/private/var/tmp/versus.app
+FlexibleFerret|~/Library/LaunchAgents/com.driver9990as7tpatch.plist
+InvisibleFerret/BeaverTail|~/Library/LaunchAgents/com.avatar.update.wake.plist
+InvisibleFerret/BeaverTail|~/.n2
+Contagious Interview (low confidence: Taskwarrior keeps its data in ~/.task)|~/.task
+Contagious Interview|/Applications/*.app/Contents/MacOS/.macos
+BlueNoroff|~/Library/LaunchAgents/com.telegram2.update.agent.plist
+BlueNoroff|/Library/Application Support/Frameworks/Telegram 2
+BlueNoroff|/Library/CloudKitDaemon
+ChillyHell|~/Library/LaunchAgents/com.apple.qtop.plist
+ChillyHell|/Library/LaunchAgents/com.apple.qtop.plist
+ChillyHell|/Library/LaunchDaemons/com.apple.qtop.plist
+ChillyHell|~/Library/com.apple.qtop
+PasivRobber|/Library/LaunchDaemons/com.myam.plist
+PasivRobber|/Library/protect/wsus/bin/goed
+ZuRu|~/Library/LaunchAgents/com.apple.fsevents.plist
+ZuRu|/Library/LaunchDaemons/com.apple.fsevents.plist
+ZuRu|/Users/Shared/.fseventsd
+ZuRu|/Applications/*.app/Contents/Frameworks/libConfigurer64.dylib
+VShell|~/.gps
+EvasivePanda|~/Library/LaunchAgents/com.Terminal.us.plist
+InletDrift|~/Library/LaunchAgents/com.apple.systemextensions.cache.plist
+Activator|~/Library/LaunchAgents/launched.*.plist
+Activator|/Library/LaunchDaemons/launched.*.plist
+Cthulhu|/Users/Shared/NW
+XCSSET|~/.zshrc_aliases
+XCSSET|~/.a
+XCSSET|/private/tmp/.f
+AdLoad|~/Library/Application Support/.[0-9]*|^\.[0-9]+$
