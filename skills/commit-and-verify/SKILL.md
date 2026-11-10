@@ -34,7 +34,7 @@ skip the skill because the probes came back empty, and do not try to `cd` your w
 **2. Review changes**
 
 ### git status
-!`git rev-parse --git-dir >/dev/null 2>&1 && git status 2>&1 || echo "NOT-A-REPO: $PWD is not a git repository. Set REPO to the target repo and use 'git -C \"\$REPO\"' for every git command below."`
+!`git rev-parse --git-dir >/dev/null 2>&1 && git status 2>&1 || echo "NOT-A-REPO: the cwd is not a git repository. Set REPO to the target repo and prefix every git command below with git -C and that path."`
 
 ### git diff (staged + unstaged)
 !`git rev-parse --git-dir >/dev/null 2>&1 && git diff HEAD 2>&1 | head -200 || echo "(skipped: not a git repository in cwd)"`
@@ -65,7 +65,7 @@ write commit messages to `/tmp`"). No `cat`/`sed` hacks either.
 **5. Push only if explicitly requested**
 
 ### Recent commits (match style)
-!`git rev-parse --git-dir >/dev/null 2>&1 && git log --oneline -5 2>&1 || echo "(skipped: not a git repository in cwd — run 'git -C \"$REPO\" log --oneline -5')"`
+!`git rev-parse --git-dir >/dev/null 2>&1 && git log --oneline -5 2>&1 || echo "(skipped: not a git repository in cwd; run git log --oneline -5 with git -C and the repo path)"`
 
 ## Commit Message Types
 
