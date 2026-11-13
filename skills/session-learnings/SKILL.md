@@ -95,7 +95,7 @@ ls CLAUDE.md AGENTS.md .claude/CLAUDE.md 2>/dev/null   # update the one that exi
 ### Step 3: Update or Create
 
 **If CLAUDE.md exists:** Add new learnings to appropriate sections
-**If no CLAUDE.md:** Create `.claude/CLAUDE.md` with learnings
+**If no CLAUDE.md:** Create `CLAUDE.md` at the root with learnings
 
 ### Step 4: Format Consistently
 
@@ -166,5 +166,5 @@ Before session end or compact:
 - [ ] Review corrections user made during session
 - [ ] Note any non-obvious commands or workflows discovered
 - [ ] Check for project conventions that differ from defaults
-- [ ] Update `.claude/CLAUDE.md` with new learnings
+- [ ] Update the project's `CLAUDE.md` with new learnings
 - [ ] Keep entries concise and actionable

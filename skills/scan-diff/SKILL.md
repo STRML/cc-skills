@@ -5,7 +5,7 @@ description: "Quick first-pass bug scan of a git diff for logic errors and secur
 
 # Scan Diff
 
-Scan the current git diff for bugs, logic errors, and security issues using a focused Sonnet subagent (`model: "sonnet"`).
+Scan the current git diff for bugs, logic errors, and security issues using a focused Haiku subagent (`model: "haiku"`).
 
 ## Usage
 
@@ -32,7 +32,7 @@ git diff --cached
    git diff HEAD
    ```
 
-2. Pass it to a Sonnet subagent with this prompt:
+2. Pass it to a Haiku subagent with this prompt:
 
    > You are a focused bug scanner. Review this git diff for: bugs and logic errors, off-by-one errors, null/undefined access, error handling gaps, security issues (injection, auth bypass, insecure defaults), and race conditions. Be terse. Only report issues you're confident about. Skip style issues. For each issue: file:line, one sentence description, suggested fix.
    >
