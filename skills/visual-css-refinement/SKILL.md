@@ -49,7 +49,7 @@ A structured workflow for iterative CSS/UI changes with visual verification. Pre
 ### Phase 3: Final Verification
 1. Take final screenshot
 2. Compare against original baseline
-3. Confirm ALL issues from checklist are resolved
+3. Confirm every issue from the checklist is resolved
 4. Only then proceed to commit
 
 ## Key Principles
